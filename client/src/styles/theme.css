@@ -1,0 +1,26 @@
+/* ===== 全局主题基建 =====
+   变量主体直接用 Element Plus 的语义 token（--el-*）：浅色是 EP 默认值，
+   深色由 html.dark + EP 的 dark/css-vars.css 自动切换，各 View 的自定义样式
+   已统一改为引用这些变量。这里只补 EP 没有语义 token 的缺口。 */
+
+:root {
+  /* 页面底色：浅色沿用项目原本的 #f5f7fa */
+  --wb-page-bg: #f5f7fa;
+  /* 首页问候条的浅蓝渐变（深色下换深蓝灰，避免刺眼） */
+  --wb-hero-from: #eef5ff;
+  --wb-hero-to: #f8fbff;
+  --wb-hero-border: #e4eefb;
+}
+
+html.dark {
+  --wb-page-bg: #0a0a0a;
+  --wb-hero-from: #1f2430;
+  --wb-hero-to: #171b24;
+  --wb-hero-border: #33415c;
+}
+
+html,
+body,
+#app {
+  background: var(--wb-page-bg);
+}

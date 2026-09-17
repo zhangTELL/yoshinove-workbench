@@ -1,0 +1,10 @@
+packages:
+  - client
+  - server
+  - shared
+
+allowBuilds:
+  better-sqlite3: true
+  esbuild: true
+  "@swc/core": true
+  vue-demi: true

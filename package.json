@@ -1,0 +1,16 @@
+{
+  "name": "yoshinove-workbench",
+  "private": true,
+  "version": "0.1.0",
+  "description": "学生工作台：课表/提醒/学习通/健康跑/笔记/AI实验区",
+  "scripts": {
+    "dev": "concurrently -n server,client -c blue,green \"pnpm --filter server dev\" \"pnpm --filter client dev\"",
+    "dev:server": "pnpm --filter server dev",
+    "dev:client": "pnpm --filter client dev",
+    "build": "pnpm -r build",
+    "typecheck": "pnpm -r typecheck"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.2"
+  }
+}

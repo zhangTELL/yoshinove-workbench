@@ -1,0 +1,3 @@
+# 第三方富文本编辑器（体积大，不入库；favicon / 图标等自有资源正常入库）
+public/vditor/
+public/vditor_tmp/
