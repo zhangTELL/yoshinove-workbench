@@ -88,6 +88,8 @@ const favOnly = ref(false)
 const gitOnly = ref(false)
 const aiOnly = ref(false)
 const stackFilter = ref('')
+/** 正在重新推断技术栈（技术栈是推断出来的，规则升级或项目换了栈时需要重跑一次） */
+const refreshingStacks = ref(false)
 const sort = ref<'lastCommit' | 'name' | 'score' | 'lastOpened'>('name')
 const showNested = ref(false)
 const weakOnly = ref(false)
@@ -306,6 +308,32 @@ async function loadList() {
 
 async function refresh() {
   await Promise.all([loadCategories(), loadList()])
+}
+
+/**
+ * 重新推断所有已登记项目的技术栈。
+ * 技术栈是「推断」的产物（读 package.json 依赖 / 各语言清单 / 源码扩展名），
+ * 所以项目换了技术栈、或识别规则升级后，老记录会过时——不必重新扫描导入，点这个就行。
+ */
+async function refreshStacks() {
+  refreshingStacks.value = true
+  try {
+    const r = await post<{ total: number; changed: number; missing: number }>('/api/projects/refresh-stacks')
+    await Promise.all([loadCategories(), loadList()])
+    // 当前筛选的那个技术栈可能已经不存在了，别让列表停在空结果上
+    if (stackFilter.value && !(data.value?.stacks ?? []).includes(stackFilter.value)) {
+      stackFilter.value = ''
+      await loadList()
+    }
+    const extra = r.missing ? `，另有 ${r.missing} 个目录已不存在` : ''
+    ElMessage.success(
+      r.changed ? `已重新识别，${r.changed} 个项目的技术栈有更新${extra}` : `技术栈已是最新（${r.total} 个项目）${extra}`,
+    )
+  } catch (e) {
+    ElMessage.error((e as Error).message)
+  } finally {
+    refreshingStacks.value = false
+  }
 }
 
 async function loadScanStatus() {
@@ -642,6 +670,8 @@ onUnmounted(() => {
         >
           <span>未分类</span><span class="cat-count">{{ uncategorized }}</span>
         </div>
+        <!-- 内建项（全部项目 / 未分类）与自建分类之间画一条分隔线 -->
+        <div class="cat-divider" />
         <div v-for="c in catTree" :key="c.id" class="cat-node">
           <div
             class="cat-item"
@@ -710,6 +740,9 @@ onUnmounted(() => {
           <el-select v-if="data?.stacks.length" v-model="stackFilter" placeholder="技术栈" clearable size="small" style="width: 130px" @change="loadList">
             <el-option v-for="s in data.stacks" :key="s" :label="s" :value="s" />
           </el-select>
+          <el-tooltip content="技术栈是从项目里推断出来的。项目换了技术栈，或你觉得识别得不对时，点一下重新读一遍（只读磁盘，不改你的文件）" placement="top">
+            <el-button size="small" :icon="Refresh" :loading="refreshingStacks" @click="refreshStacks">重新识别</el-button>
+          </el-tooltip>
           <el-select v-model="sort" size="small" style="width: 140px" @change="loadList">
             <el-option label="按名称" value="name" />
             <el-option label="按最近提交" value="lastCommit" />
@@ -1019,6 +1052,12 @@ onUnmounted(() => {
   font-size: 14px;
   color: var(--el-text-color-primary);
   padding: 0 8px 8px;
+}
+/* 内建项（全部项目 / 未分类）与自建分类之间的分隔线 */
+.cat-divider {
+  height: 1px;
+  margin: 8px 4px;
+  background: var(--el-border-color-lighter);
 }
 .cat-item {
   display: flex;

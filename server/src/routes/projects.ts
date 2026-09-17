@@ -1,9 +1,10 @@
 /**
- * P8 项目管理：扫描、列表、手动添加、元数据、一键打开
+ * P8 项目管理：扫描、列表、手动添加、元数据、文件浏览/编辑、分类、一键打开
  *
  * 安全边界（见设计方案 §八）：
- *  - 「打开」只允许固定的 5 种目标，用 execFile + 参数数组（不经 shell），项目路径作为参数传递；
- *  - 本期不做文件删除/重命名；P8-1 也不做文件读写（P8-2 再引入，并带路径校验与 .bak）。
+ *  - 「打开」只接受**已登记项目的目录**，启动器来自编译期目录表 + 本机一次性解析（`services/openInApp.ts`）；
+ *  - 文件读写一律走「项目 id + 项目内相对路径」，服务端做 resolve + realpath 双重校验（`services/projectFiles.ts`）；
+ *  - 删除是永久删除，但只作用于项目内路径，且项目根不可删/不可重命名。
  */
 import { execFile } from 'node:child_process'
 import { existsSync, readdirSync } from 'node:fs'
@@ -24,6 +25,7 @@ import {
   startScan,
 } from '../services/projectScan.js'
 import { listTree, readProjectFile, writeProjectFile, createEntry, renameEntry, deleteEntry } from '../services/projectFiles.js'
+import { detectStack } from '../services/projectStack.js'
 import { readGitDetail } from '../services/projectGit.js'
 import { previewStatus, startPreview, stopPreview } from '../services/previewServer.js'
 import { appIcon, listApps, openInApp } from '../services/openInApp.js'
@@ -366,6 +368,37 @@ export const projectRoutes: FastifyPluginAsync = async (app) => {
     const { id } = req.params as { id: string }
     db.delete(projects).where(eq(projects.id, Number(id))).run()
     return { ok: true }
+  })
+
+  /**
+   * 重新推断全部已登记项目的技术栈。
+   *
+   * 技术栈是**推断**出来的（读 package.json 依赖 / 各语言清单 / 源码扩展名），
+   * 所以识别规则一变、或者项目自己换了技术栈，老记录里的值就过时了——
+   * 又不可能要求用户重新扫描一遍。这里只重读磁盘、不改任何项目文件。
+   */
+  app.post('/api/projects/refresh-stacks', async () => {
+    const rows = db.select().from(projects).all()
+    let changed = 0
+    let missing = 0
+    for (const r of rows) {
+      if (!existsSync(r.path)) {
+        missing++
+        continue
+      }
+      const next = JSON.stringify(detectStack(r.path))
+      let cur = '[]'
+      try {
+        cur = JSON.stringify(JSON.parse(r.stack || '[]'))
+      } catch {
+        /* 老值坏了就当成空，正好重写 */
+      }
+      if (cur !== next) {
+        db.update(projects).set({ stack: next, updatedAt: new Date().toISOString() }).where(eq(projects.id, r.id)).run()
+        changed++
+      }
+    }
+    return { total: rows.length, changed, missing }
   })
 
   // ===== 排除规则（P8-1 先开放接口，界面上放 P8-3 的设置板块）=====

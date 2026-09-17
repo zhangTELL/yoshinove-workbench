@@ -495,7 +495,16 @@ async function save() {
 let vditorMod: typeof import('vditor') | null = null
 async function renderMarkdown() {
   if (!mdHost.value) return
-  vditorMod ??= await import('vditor')
+  // ⚠️ **必须自己引入 vditor 的基础样式表**：`Vditor.preview()` 只会按需加载代码高亮与内容主题样式，
+  // 基础样式（`dist/index.css`）它一概不管。缺了它的后果很具体、也很容易被当成"渲染坏了"：
+  // 代码块里的「复制」按钮会露馅 —— 用于剪贴板兜底的 `<textarea>` 直接显示出来（还带右下角拖拽柄），
+  // 图标 `<svg>` 退回默认尺寸 300×150，看起来就是一个巨大的黑色文档图标。
+  // 笔记页（NotesView）引了这句，所以那边一直正常；这里是照抄时漏掉的。
+  // 与 vditor 一起动态引入，保持「不进首屏」。
+  if (!vditorMod) {
+    await import('vditor/dist/index.css')
+    vditorMod = await import('vditor')
+  }
   const { default: Vditor } = vditorMod
   await Vditor.preview(mdHost.value, draft.value, {
     cdn: '/vditor',
@@ -738,6 +747,19 @@ watch([mode, () => current.value?.rel], async () => {
   overflow: auto;
   padding: 18px 22px;
   background: var(--el-bg-color);
+}
+/*
+ * Vditor 对「预览」里的代码块只给了 `margin`（`.vditor-reset pre { margin: 1em 0 }`），
+ * 底色是留给编辑器里的 pre 的（`.vditor-ir pre.vditor-reset { background-color: ... }`）。
+ * 于是预览里代码块和正文一样是白底，读起来分不出块。这里补个底色与圆角，
+ * 只作用于本组件的预览宿主，不动笔记页那个真正的编辑器。
+ */
+.pf-markdown :deep(pre) {
+  background: var(--el-fill-color-light);
+  border: 1px solid var(--el-border-color-extra-light);
+  border-radius: 6px;
+  padding: 12px 14px;
+  overflow: auto;
 }
 .pf-empty {
   display: flex;

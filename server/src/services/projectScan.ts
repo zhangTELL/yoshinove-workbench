@@ -11,6 +11,7 @@ import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs'
 import path from 'node:path'
 import { eq } from 'drizzle-orm'
 import { db, sqlite } from '../db/index.js'
+import { detectStack } from './projectStack.js'
 import { excludeRules, projects } from '../db/schema.js'
 
 // ==================== 排除规则（内置，实测驱动） ====================
@@ -79,22 +80,7 @@ export const AI_MARKERS = [
   'claude.md', 'agents.md', '.cursorrules', '.aider.conf.yml',
 ]
 
-/** 技术栈推断：标记 → 标签 */
-const STACK_RULES: { label: string; hit: (names: Set<string>) => boolean }[] = [
-  { label: 'Vue', hit: (n) => n.has('vue.config.ts') || n.has('vue.config.js') },
-  { label: 'Vite', hit: (n) => n.has('vite.config.ts') || n.has('vite.config.js') },
-  { label: 'Next.js', hit: (n) => n.has('next.config.js') || n.has('next.config.mjs') || n.has('next.config.ts') },
-  { label: 'Node.js', hit: (n) => n.has('package.json') },
-  { label: 'TypeScript', hit: (n) => n.has('tsconfig.json') },
-  { label: 'Rust', hit: (n) => n.has('cargo.toml') },
-  { label: 'Go', hit: (n) => n.has('go.mod') },
-  { label: 'Python', hit: (n) => n.has('pyproject.toml') || n.has('requirements.txt') || n.has('setup.py') },
-  { label: 'Java', hit: (n) => n.has('pom.xml') || n.has('build.gradle') || n.has('build.gradle.kts') },
-  { label: 'C/C++', hit: (n) => n.has('cmakelists.txt') || n.has('makefile') || n.has('*.sln') },
-  { label: 'PHP', hit: (n) => n.has('composer.json') },
-  { label: 'Ruby', hit: (n) => n.has('gemfile') },
-  { label: 'Flutter', hit: (n) => n.has('pubspec.yaml') },
-]
+/** 技术栈推断：只按根目录文件名匹配是不够的，见 services/projectStack.ts */
 
 export interface ScanCandidate {
   dir: string
@@ -109,8 +95,8 @@ export interface ScanCandidate {
 const THRESHOLD_PROJECT = 50 // ≥50：有 git 等强信号
 const THRESHOLD_WEAK = 15 // 15~49：弱信号（折叠展示，可收藏提升）
 
-/** 单目录打分；score 为 0 表示不是候选 */
-function scoreDir(dir: string, names: Set<string>): { score: number; markers: string[]; stack: string[] } {
+/** 单目录打分（只看文件名，保持廉价）：score 为 0 表示不是候选。技术栈另由 detectStack 推断 */
+function scoreDir(dir: string, names: Set<string>): { score: number; markers: string[] } {
   const markers: string[] = []
   let score = 0
 
@@ -140,9 +126,7 @@ function scoreDir(dir: string, names: Set<string>): { score: number; markers: st
     markers.push('ai')
   }
 
-  const stack = STACK_RULES.filter((r) => r.hit(names)).map((r) => r.label)
-  const hasGit = names.has('.git')
-  return { score, markers, stack: stack.slice(0, 4) }
+  return { score, markers }
 }
 
 /** 读取 README 摘要（前 4KB，去掉常见 Markdown 标记，截 200 字） */
@@ -394,14 +378,14 @@ async function runScan(cfg: ScanConfig): Promise<void> {
     const names = new Set(entries.map((e) => e.name.toLowerCase()))
 
     if (!rootSet.has(path.resolve(dir).toLowerCase())) {
-      const { score, markers, stack: techStack } = scoreDir(dir, names)
+      const { score, markers } = scoreDir(dir, names)
       if (score >= THRESHOLD_WEAK) {
         candidates.push({
           dir,
           name: path.basename(dir),
           score,
           markers,
-          stack: techStack,
+          stack: [], // 走完再统一推断（要读清单内容，别塞进这个热循环）
           hasGit: names.has('.git'),
           parentPath: null,
         })
@@ -433,6 +417,9 @@ async function runScan(cfg: ScanConfig): Promise<void> {
       p = path.dirname(p)
     }
   }
+
+  // 技术栈推断：只对候选做（要读 package.json 等清单的内容，比打分贵）
+  for (const c of candidates) c.stack = detectStack(c.dir)
 
   // git 元数据：并发 4，仅对有 .git 的候选
   const gitDirs = candidates.filter((c) => c.hasGit)
@@ -504,7 +491,8 @@ export function dirMtime(dir: string): string | null {
 
 async function describeDir(dir: string): Promise<ProjectMeta> {
   const names = new Set(readdirSync(dir).map((n) => n.toLowerCase()))
-  const { score, markers, stack } = scoreDir(dir, names)
+  const { score, markers } = scoreDir(dir, names)
+  const stack = detectStack(dir)
   const hasGit = names.has('.git')
   let git: (GitInfo & { branch: string | null }) | null = null
   if (hasGit) {
