@@ -56,11 +56,19 @@
 # 1. 安装依赖（必须在仓库根目录）
 pnpm install
 
-# 2. 同时启动前后端
+# 2. 准备 Vditor 运行时资源（未随仓库分发，约 22MB，只需执行一次）
+#    macOS / Linux
+cp -r client/node_modules/vditor/dist client/public/vditor/dist
+#    Windows PowerShell
+#    Copy-Item client/node_modules/vditor/dist client/public/vditor/dist -Recurse -Force
+
+# 3. 同时启动前后端
 pnpm dev
 ```
 
 启动后打开 <http://127.0.0.1:5173>。
+
+> **第 2 步是干什么的**：`client/public/vditor/` 是约 22MB 的第三方编辑器资源，笔记页与 Markdown 预览通过 `cdn: '/vditor'` 从这里加载，因此已被 `.gitignore` 排除（内容与 `node_modules/vditor/dist` 完全一致，可随时重新拷贝）。跳过它，**笔记页与 Markdown 预览会因加载不到运行时资源而失效**，其余功能不受影响。
 
 只想起其中一端：
 
@@ -77,7 +85,7 @@ pnpm dev:client    # 仅前端
 ├── client/                      # Vue 3 前端
 │   ├── src/views/               # 每个功能一个 View（首页/课表/学习通/笔记/AI/工具/设置）
 │   ├── src/components/          # SectionPicker（点格选节次）、PushChannelCard（推送通道配置卡）
-│   ├── public/                  # favicon 等静态资源（Vditor 运行时也在这里）
+│   ├── public/                  # favicon 等静态资源（Vditor 运行时也在这里，见「快速开始」第 2 步）
 │   ├── index.html               # 声明 favicon
 │   └── vite.config.ts           # 端口 5173 + 代理
 ├── server/                      # Fastify 后端
