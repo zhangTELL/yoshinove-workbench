@@ -125,6 +125,17 @@ function deadlineInfo(h: Homework): { text: string; type: 'danger' | 'warning' |
   return { text, type: 'success' }
 }
 
+/**
+ * 同步时间：服务端给的是 ISO 字符串（UTC），直接贴出来是 `2026-09-18T12:08:36.088Z`，
+ * 既不好读、时区也不对，转成本地时间显示。
+ */
+function fmtSync(iso: string): string {
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return iso
+  const p = (n: number) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`
+}
+
 // ===== 数据加载 =====
 async function loadSemesterInfo() {
   const sems = await get<Semester[]>('/api/semesters')
@@ -252,7 +263,7 @@ async function removeHomework(h: Homework) {
       </template>
       <template v-else>
         <div class="status-row">
-          <span v-if="status.lastSync">上次同步：{{ status.lastSync }}</span>
+          <span v-if="status.lastSync">上次同步：{{ fmtSync(status.lastSync) }}</span>
           <span>共 {{ status.total }} 条作业</span>
           <el-button type="primary" :icon="Refresh" :loading="syncing" @click="sync">立即同步</el-button>
           <el-button text type="danger" @click="removeCookie">删除 Cookie</el-button>

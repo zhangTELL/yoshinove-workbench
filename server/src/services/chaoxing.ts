@@ -216,6 +216,22 @@ export async function fetchCourseList(cookie: string): Promise<ChaoxingCourse[]>
  * 2. 带 enc 访问课程页 → 隐藏域 #workEnc（作业列表专用 enc）
  * 3. mooc1.chaoxing.com/mooc2/work/list?courseId&classId&cpi&ut=s&enc=workEnc
  */
+/**
+ * 学习通作业的「原始状态文本」→ 本应用的两值状态。
+ *
+ * 词表是**实测**出来的（2026-09-18 遍历全部 40 门课程，原始状态只出现这 4 种）：
+ *   `已完成` × 24、`待批阅` × 18、`未交` × 3、`未开始` × 1
+ *
+ * ⚠️ **`待批阅` = 已提交、等老师批阅，必须算「已提交」**。
+ * 只认 `已完成` 时它会被归成「进行中」，症状就是**已提交的作业一直留在「未提交」栏**
+ * （2026-09-18 用户反馈：Java 程序设计 `2026-2027-01(wk2)` 已提交却还在未提交栏，
+ * 其原始状态正是 `待批阅`）。
+ *
+ * 为什么不反过来「白名单未提交词、其余算已提交」：未知状态**宁可多显示也不该漏掉待办**——
+ * 误判成未提交只是多一条列表项，误判成已提交会让 DDL 提醒静默消失。
+ */
+const SUBMITTED_STATUS = new Set(['已完成', '待批阅'])
+
 export async function fetchWorkList(cookie: string, course: ChaoxingCourse): Promise<ChaoxingWork[]> {
   const mid = await cxFetch(
     `https://mooc1-api.chaoxing.com/mooc-ans/visit/stucoursemiddle?courseid=${course.courseId}&clazzid=${course.classId}&vc=1&cpi=${course.cpi}&ismooc2=1&v=2`,
@@ -269,7 +285,7 @@ export async function fetchWorkList(cookie: string, course: ChaoxingCourse): Pro
       title,
       deadline,
       url: url.startsWith('http') ? url : `https://mooc1.chaoxing.com${url}`,
-      status: status === '已完成' ? '已提交' : '进行中',
+      status: SUBMITTED_STATUS.has(status) ? '已提交' : '进行中',
       courseStart: course.startDate,
     })
   }
