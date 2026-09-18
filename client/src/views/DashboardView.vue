@@ -17,6 +17,7 @@ import {
   Setting,
 } from '@element-plus/icons-vue'
 import { get, post } from '../api/http'
+import AppIcon from '../components/AppIcon.vue'
 import { DEFAULT_NAME, displayName, NAME_MAX, saveDisplayName } from '../stores/profile'
 
 /**
@@ -336,13 +337,18 @@ async function loadRuns() {
 }
 
 // ==================== 快捷入口 ====================
+/**
+ * 快捷入口：图标用 macOS 风格的圆角方形（见 components/AppIcon.vue）。
+ * 配色取 macOS 系统色（每个入口一个色相，像 Launchpad 里一排各不相同的 App 图标），
+ * 而不是清一色的强调色——那才是 Mac 的观感。渐变是"上浅下深"，白色字形压在中间色上。
+ */
 const shortcuts = [
-  { path: '/schedule', title: '课表', hint: '周视图 / 提醒', icon: Calendar },
-  { path: '/chaoxing', title: '学习通作业', hint: '同步 / 待办', icon: Reading },
-  { path: '/notes', title: '笔记', hint: 'Markdown', icon: Notebook },
-  { path: '/ai-lab?tab=balance', title: 'AI 实验区', hint: '余额 / 对比', icon: MagicStick },
-  { path: '/tools?tab=runs', title: '日常工具', hint: '打卡 / 绩点', icon: Histogram },
-  { path: '/settings', title: '设置', hint: '外观 / 主题', icon: Setting },
+  { path: '/schedule', title: '课表', hint: '周视图 / 提醒', icon: Calendar, from: '#4B9BFF', to: '#0A5FC8' },
+  { path: '/chaoxing', title: '学习通作业', hint: '同步 / 待办', icon: Reading, from: '#FFA23F', to: '#D26400' },
+  { path: '/notes', title: '笔记', hint: 'Markdown', icon: Notebook, from: '#FFC43D', to: '#C97C00' },
+  { path: '/ai-lab?tab=balance', title: 'AI 实验区', hint: '余额 / 对比', icon: MagicStick, from: '#C077F5', to: '#7A2BBE' },
+  { path: '/tools?tab=runs', title: '日常工具', hint: '打卡 / 绩点', icon: Histogram, from: '#3FC9BE', to: '#0B857C' },
+  { path: '/settings', title: '设置', hint: '外观 / 主题', icon: Setting, from: '#A5A5AD', to: '#66666E' },
 ]
 
 const go = (path: string) => void router.push(path)
@@ -614,7 +620,7 @@ onMounted(loadAll)
       <template #header>快捷入口</template>
       <div class="sc-grid">
         <button v-for="s in shortcuts" :key="s.path" class="sc-item" @click="go(s.path)">
-          <el-icon class="sc-icon"><component :is="s.icon" /></el-icon>
+          <AppIcon :icon="s.icon" :size="30" :from="s.from" :to="s.to" />
           <div class="sc-body">
             <div class="sc-title">{{ s.title }}</div>
             <div class="sc-hint">{{ s.hint }}</div>
@@ -1057,21 +1063,19 @@ onMounted(loadAll)
   gap: 12px;
   padding: 14px 16px;
   border: 1px solid var(--el-border-color);
-  border-radius: 10px;
+  border-radius: var(--wb-radius-card);
   background: var(--el-bg-color);
   cursor: pointer;
   text-align: left;
   transition: border-color 0.15s, box-shadow 0.15s, transform 0.15s;
 }
+/* 悬停：macOS 里可点条目的反馈是"抬起一点"，而不是换底色。
+   阴影用 color-mix 从强调色现算——原来写死的 rgba(64,158,255) 是默认蓝，
+   在 macOS 主题（强调色 #007aff）下会露出一道不属于该主题的蓝。 */
 .sc-item:hover {
-  border-color: var(--el-color-primary-light-8);
-  box-shadow: 0 2px 10px rgba(64, 158, 255, 0.12);
+  border-color: var(--el-color-primary-light-7);
+  box-shadow: 0 2px 10px color-mix(in srgb, var(--el-color-primary) 16%, transparent);
   transform: translateY(-1px);
-}
-.sc-icon {
-  font-size: 20px;
-  color: var(--el-color-primary);
-  flex-shrink: 0;
 }
 .sc-body {
   min-width: 0;

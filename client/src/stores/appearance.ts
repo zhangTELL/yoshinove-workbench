@@ -1,15 +1,19 @@
 import { reactive, watch } from 'vue'
 
 /**
- * 外观设置：主题模式 / 主题色 / 圆角 / 字号 / 语言。
+ * 外观设置：主题预置 / 主题模式 / 主题色 / 圆角 / 字号 / 语言。
  *
- * 与旧版「占位页」的区别：这里的状态会真实写到 documentElement 上——
- *   - 主题模式：html.dark（Element Plus 官方深色变量）+ auto 跟随系统
+ * 变量分层（详见 styles/tokens.css 的说明）：
+ *   主题预设（themes/*.css）→ --wb-* 语义契约 → bridge.css 映射到 --el-*（组件只认 EP 变量）
+ * 本文件负责把状态写到 documentElement：
+ *   - 主题预置：`data-wb-theme=<id>`（预置主题的规则靠这个属性命中）
+ *   - 主题模式：`html.dark`（**只有 default 主题允许**：四套预置主题都是浅色专用）
  *   - 主题色：--el-color-primary 及其 light/dark 梯度（按 EP 官方 tint 比例用 color-mix 现算）
- *   - 圆角：--el-border-radius-* 与卡片圆角
+ *   - 圆角：--wb-radius-{base,small,card}（契约层；bridge.css 再映射到 EP 的 --el-*）
  *   - 字号：#app 的 zoom（EP 全用 px，改根 font-size 无效；本地应用与 Electron 都是 Chromium）
  * 持久化沿用 workbench.uiPrefs（与占位时期同键，老数据直接迁移）。
  */
+import { themePreset } from '../utils/themePresets'
 
 export type AppearanceMode = 'light' | 'dark' | 'auto'
 export type FontScale = 'small' | 'normal' | 'large' | 'xlarge'
@@ -24,7 +28,7 @@ const DEFAULTS = {
   radius: 6,
   fontScale: 'normal' as FontScale,
   language: 'zh-CN' as AppLanguage,
-  /** 主题预置卡（樱花/森林/暗夜）：暂未生效，只记录选择 */
+  /** 主题预置：见 utils/themePresets.ts（default / macos / claude / paper / miko） */
   theme: 'default',
 }
 
@@ -32,6 +36,26 @@ export const appearance = reactive({ ...DEFAULTS })
 
 export function resetAppearance(): void {
   Object.assign(appearance, DEFAULTS)
+}
+
+/**
+ * 切换主题预设。
+ * 把该主题的默认强调色/圆角一并写入——「主题自带一套协调的默认值，之后用户改了就以用户为准」，
+ * 这样比"主题只改背景色、强调色还是上一个人的"要可预期得多。
+ * 预置主题都是浅色专用，所以顺手把明暗切回浅色。
+ */
+export function applyThemePreset(id: string): void {
+  const p = themePreset(id)
+  if (!p.ready) return
+  appearance.theme = p.id
+  if (p.accent) appearance.accent = p.accent
+  if (typeof p.radius === 'number') appearance.radius = p.radius
+  if (p.id !== 'default') appearance.appearance = 'light'
+}
+
+/** 当前主题是否锁定了明暗（四套预置主题都没有深色，UI 上要把明暗切换禁用掉） */
+export function themeLocksMode(): boolean {
+  return themePreset(appearance.theme).id !== 'default'
 }
 
 const media = window.matchMedia?.('(prefers-color-scheme: dark)')
@@ -43,7 +67,11 @@ function isDark(): boolean {
 /** 把当前外观写到 documentElement。所有副作用集中在这里，方便整体重放 */
 export function applyAppearance(): void {
   const root = document.documentElement
-  root.classList.toggle('dark', isDark())
+  const preset = themePreset(appearance.theme)
+  // 深色只属于 default 主题：四套预置主题都是浅色专用，激活时强制不挂 html.dark
+  root.classList.toggle('dark', preset.id === 'default' && isDark())
+  // 预置主题的规则以 data-wb-theme 作用域声明（见 styles/themes/*.css）
+  root.dataset.wbTheme = preset.id
 
   const s = root.style
   const a = appearance.accent
@@ -54,10 +82,13 @@ export function applyAppearance(): void {
     s.setProperty(`--el-color-primary-light-${n}`, `color-mix(in srgb, ${a} ${100 - n * 10}%, #fff)`)
   }
 
+  // 圆角：写的是契约层的 --wb-radius-*，由 bridge.css 映射到 EP。
+  // ⚠️ 不要在这里直接写 --el-card-border-radius：EP 把它声明在 .el-card 自己身上，
+  //    html 上的值传不进去（2026-09-18 实测踩过，卡片圆角被锁死在 4px）。
   const r = appearance.radius
-  s.setProperty('--el-border-radius-base', `${r}px`)
-  s.setProperty('--el-border-radius-small', `${Math.max(2, Math.round(r * 0.6))}px`)
-  s.setProperty('--el-card-border-radius', `${Math.max(3, Math.round(r * 1.5))}px`)
+  s.setProperty('--wb-radius-base', `${r}px`)
+  s.setProperty('--wb-radius-small', `${Math.max(2, Math.round(r * 0.6))}px`)
+  s.setProperty('--wb-radius-card', `${Math.max(3, Math.round(r * 1.5))}px`)
 
   const app = document.getElementById('app')
   const z = ZOOM[appearance.fontScale] ?? 1
@@ -81,6 +112,9 @@ export function initAppearance(): void {
   } catch {
     /* 坏数据回落默认值 */
   }
+  // 老版本占位期的主题 id（sakura / forest / night）已经不存在了，
+  // 不归一化的话会出现「主题名是个不存在的值、样式却没有」的中间态。
+  if (!themePreset(appearance.theme).ready) appearance.theme = DEFAULTS.theme
   applyAppearance()
 
   watch(appearance, () => {

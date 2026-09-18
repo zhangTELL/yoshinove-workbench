@@ -1,0 +1,127 @@
+/* ===== 语义 token 契约（--wb-*）=====
+   这一层是「主题预设」与「组件」之间的唯一接口，分三段：
+
+     ① 契约（本文件 :root）：变量名固定，不随主题变化；默认值 = 改造前的观感，
+        所以 `default` 主题（appearance.theme === 'default'）与改动前逐像素一致。
+        **唯一一处刻意偏离**：`--wb-radius-*`（见下方圆角段）——改造前卡片圆角被 EP 的
+        就地声明锁死在 4px、滑块根本不起作用，2026-09-18 修好后才真的是 9px。
+     ② 桥接（bridge.css）：把 --wb-* 集中映射到 Element Plus 的 --el-*，
+        主题预设只需覆盖 --wb-*，不必也不应该直接改 --el-*。
+     ③ 预设（themes/*.css）：每套主题一个文件，只声明值 + 少量表面规则（毛玻璃/纹理）。
+
+   加一套主题 = 加一个 themes/*.css + 在 utils/themePresets.ts 登记元数据，
+   业务组件与 bridge.css 都不用动。
+
+   ⚠️ 深色：四套预置主题都是**浅色专用**，深色只属于 `default` 主题。
+   所以 `html.dark` 段只定义 default 主题的取值（等于 EP 深色默认值），
+   预置主题激活时 appearance 层会强制不挂 html.dark（见 stores/appearance.ts）。 */
+
+:root {
+  /* ---------- 页面底 ---------- */
+  --wb-bg: #f5f7fa;
+  /* 页面底纹（默认无；毛玻璃主题会用柔和渐变充当"壁纸"，玻璃才有东西可透） */
+  --wb-bg-image: none;
+
+  /* ---------- 表面 ---------- */
+  --wb-surface: #ffffff; /* 卡片、面板 */
+  --wb-surface-overlay: var(--wb-surface); /* 浮层（对话框/下拉/抽屉）；毛玻璃主题会把它做成半透明 */
+
+  /* ---------- 填充档（对齐 EP 的 fill 梯度）---------- */
+  --wb-fill: #f0f2f5;
+  --wb-fill-light: #f5f7fa;
+  --wb-fill-lighter: #fafafa;
+  --wb-fill-extra-light: #fafcff;
+  --wb-fill-dark: #ebedf0;
+  --wb-fill-darker: #e6e8eb;
+  --wb-fill-blank: #ffffff;
+
+  /* ---------- 文字 ---------- */
+  --wb-text: #303133;
+  --wb-text-regular: #606266;
+  --wb-text-muted: #909399;
+  --wb-text-faint: #a8abb2;
+  --wb-text-disabled: #c0c4cc;
+
+  /* ---------- 边框 ---------- */
+  --wb-border-darker: #cdd0d6;
+  --wb-border-dark: #d4d7de;
+  --wb-border: #dcdfe6;
+  --wb-border-light: #e4e7ed;
+  --wb-border-lighter: #ebeef5;
+  --wb-border-faint: #f2f6fc;
+
+  /* ---------- 阴影 ---------- */
+  --wb-shadow: 0px 12px 32px 4px #0000000a, 0px 8px 20px #00000014;
+  --wb-shadow-light: 0px 0px 12px #0000001f;
+  --wb-shadow-lighter: 0px 0px 6px #0000001f;
+  --wb-shadow-dark: 0px 16px 48px 16px #00000014, 0px 12px 32px #0000001f, 0px 8px 16px -8px #00000029;
+
+  /* ---------- 圆角 ----------
+     由「设置 → 外观 → 界面圆角」滑块驱动：stores/appearance.ts 以**行内样式**把这三个值
+     写在 :root 上（行内优先级最高，用户滑块永远压过这里的兜底值与主题的默认值）。
+     档位关系：small ≈ 0.6×base、card ≈ 1.5×base；默认主题 radius = 6 → 6 / 4 / 9。
+
+     ⚠️ 为什么圆角必须走 --wb-* 而不是像主色那样直接写 --el-*：
+     EP 有一批组件把圆角变量**就地声明在自己身上**（`.el-card{--el-card-border-radius:4px}`、
+     `.el-message-box{--el-messagebox-border-radius:4px}` …）。就地声明永远压过从 :root
+     继承的值，所以在 html 上写 --el-card-border-radius **完全不生效**（实测：html 上是 9px，
+     卡片元素上仍解析成 4px）。bridge.css 因此在组件选择器上再声明一遍（「组件级圆角补丁」）。
+     ⇒ 以后要调某个 EP 组件的圆角，只在这里加 token + 去 bridge.css 补丁区加一条，别在主题里写死。 */
+  --wb-radius-base: 6px;
+  --wb-radius-small: 4px;
+  --wb-radius-card: 9px;
+
+  /* ---------- 字体 ---------- */
+  --wb-font-ui: 'Segoe UI', 'Microsoft YaHei', system-ui, sans-serif;
+  --wb-font-display: var(--wb-font-ui);
+  --wb-font-mono: ui-monospace, 'Cascadia Mono', Consolas, 'Courier New', monospace;
+
+  /* ---------- 质感（默认全关）----------
+     --wb-glass-* 只有在主题里给了值才生效；--wb-glass-blur: 0 时毛玻璃规则等于不生效 */
+  --wb-glass-bg: var(--wb-surface);
+  --wb-glass-border: var(--wb-border-light);
+  --wb-glass-blur: 0px;
+  --wb-glass-saturate: 100%;
+  --wb-texture: none;
+  --wb-texture-size: auto;
+
+  /* ---------- 首页问候条（沿用旧变量名，DashboardView 在用）---------- */
+  --wb-hero-from: #eef5ff;
+  --wb-hero-to: #f8fbff;
+  --wb-hero-border: #e4eefb;
+
+  /* 兼容旧名（改动前 theme.css 里叫 --wb-page-bg） */
+  --wb-page-bg: var(--wb-bg);
+}
+
+/* 深色：只服务 `default` 主题，取值 = EP 深色默认值（与改动前一致） */
+html.dark {
+  --wb-bg: #0a0a0a;
+  --wb-surface: #141414;
+  --wb-surface-overlay: #1d1e1f;
+  --wb-fill: #303030;
+  --wb-fill-light: #262727;
+  --wb-fill-lighter: #1d1d1d;
+  --wb-fill-extra-light: #191919;
+  --wb-fill-dark: #39393a;
+  --wb-fill-darker: #424243;
+  --wb-fill-blank: #141414;
+  --wb-text: #e5eaf3;
+  --wb-text-regular: #cfd3dc;
+  --wb-text-muted: #a3a6ad;
+  --wb-text-faint: #8d9095;
+  --wb-text-disabled: #6c6e72;
+  --wb-border-darker: #636466;
+  --wb-border-dark: #58585b;
+  --wb-border: #4c4d4f;
+  --wb-border-light: #414243;
+  --wb-border-lighter: #363637;
+  --wb-border-faint: #2b2b2c;
+  --wb-shadow: 0px 12px 32px 4px #0000005c, 0px 8px 20px #000000b8;
+  --wb-shadow-light: 0px 0px 12px #000000b8;
+  --wb-shadow-lighter: 0px 0px 6px #000000b8;
+  --wb-shadow-dark: 0px 16px 48px 16px #000000b8, 0px 12px 32px #000, 0px 8px 16px -8px #000;
+  --wb-hero-from: #1f2430;
+  --wb-hero-to: #171b24;
+  --wb-hero-border: #33415c;
+}

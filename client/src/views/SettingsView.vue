@@ -1,14 +1,16 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { ElMessage } from 'element-plus'
-import { appearance, resetAppearance } from '../stores/appearance'
+import { appearance, applyThemePreset, resetAppearance, themeLocksMode } from '../stores/appearance'
+import { THEME_PRESETS, themePreset } from '../utils/themePresets'
 
 /**
- * 设置：工作台级个性化配置，**全部实时生效**（外观/圆角/字号/语言），
+ * 设置：工作台级个性化配置，**全部实时生效**（主题预置/外观/圆角/字号/语言），
  * 选择存在 localStorage 的 workbench.uiPrefs。
  *
- * 唯一的例外是「主题」预置卡（樱花/森林/暗夜），仍是界面占位——四套预置需要
- * 各自的完整配色表，等深色变量体系稳定后再做。
+ * 主题预置走三层变量（见 styles/tokens.css 的说明）：预设只声明 --wb-*，由 bridge.css
+ * 统一映射到 Element Plus 的 --el-*，所以这里只负责"选一个 id"+ 把该主题的默认强调色/圆角写进外观设置。
+ * ⚠️ 四套预置主题都是**浅色专用**，深色只属于「默认」——选中预置时明暗切换会被禁用（themeLocksMode）。
  *
  * 业务侧的配置入口不在这里：
  *   - 上课提醒的规则与推送通道 → 课表 → 上课提醒
@@ -18,19 +20,12 @@ import { appearance, resetAppearance } from '../stores/appearance'
  * 本页不发任何后端请求。
  */
 
-const ACCENT_PRESETS = ['#409eff', '#7c5cff', '#e873a4', '#22a06b', '#e6a23c', '#f56c6c', '#14b8a6', '#6b7280']
+const ACCENT_PRESETS = ['#409eff', '#007aff', '#7c5cff', '#e873a4', '#22a06b', '#e6a23c', '#f56c6c', '#14b8a6', '#6b7280']
 
 const APPEARANCE_OPTIONS = [
   { value: 'light', label: '浅色' },
   { value: 'dark', label: '深色' },
   { value: 'auto', label: '跟随系统' },
-]
-
-const THEME_PRESETS = [
-  { value: 'default', name: '默认', desc: '简洁蓝色，标准间距', colors: ['#409eff', '#f5f7fa', '#303133'] },
-  { value: 'sakura', name: '樱花', desc: '柔粉配色，适合长时间阅读', colors: ['#e873a4', '#fdf4f8', '#4a3540'] },
-  { value: 'forest', name: '森林', desc: '低饱和绿，护眼', colors: ['#22a06b', '#f2f8f4', '#2b3a32'] },
-  { value: 'night', name: '暗夜', desc: '深色底，夜间使用', colors: ['#7c5cff', '#1e1f24', '#e5e7eb'] },
 ]
 
 const LANGUAGE_OPTIONS = [
@@ -50,13 +45,27 @@ const FONT_OPTIONS = [
 const FONT_PX: Record<string, number> = { small: 13, normal: 14, large: 16, xlarge: 18 }
 const previewSize = () => FONT_PX[appearance.fontScale] ?? 14
 
+/** 卡片圆角 = 1.5×基础档（与 stores/appearance.ts 的推导保持一致，只为在提示里显示真实值） */
+const cardRadius = computed(() => Math.max(3, Math.round(appearance.radius * 1.5)))
+
+/** 当前主题是否锁定了明暗（预置主题都是浅色专用） */
+const modeLocked = computed(() => themeLocksMode())
+/** 当前主题预设（用于文案与强调色提示） */
+const currentPreset = computed(() => themePreset(appearance.theme))
+
+/** 手动改强调色后就不再跟随主题默认值——所以这里不做任何"记住主题默认色"的额外处理 */
 function pickAccent(c: string) {
   appearance.accent = c
 }
 
-function pickTheme(v: string) {
-  appearance.theme = v
-  ElMessage.info('主题预置卡暂未生效（需要各自的完整配色表），当前仅为占位')
+function pickTheme(id: string) {
+  const p = themePreset(id)
+  if (!p.ready) {
+    ElMessage.info(`「${p.name}」还在做，先选 macOS 那套试试`)
+    return
+  }
+  applyThemePreset(id)
+  ElMessage.success(id === 'default' ? '已切回默认主题' : `已切换到「${p.name}」主题`)
 }
 
 function reset() {
@@ -72,7 +81,7 @@ function reset() {
       :closable="false"
       show-icon
       title="这里的改动会立即生效"
-      description="换完立即生效，刷新也不会丢。「主题」那几套预置配色还在做，现在选了不会有变化。其他设置不在这一页：上课提醒和推送方式在「课表 → 上课提醒」，学习通登录在「学习通作业」，余额提醒金额在「AI 实验区 → 账户余额」。"
+      description="换完立即生效，刷新也不会丢。「主题」里默认与 macOS 两套可选，另外三套在做；预置主题都是浅色专用，选中后深色会被禁用。其他设置不在这一页：上课提醒和推送方式在「课表 → 上课提醒」，学习通登录在「学习通作业」，余额提醒金额在「AI 实验区 → 账户余额」。"
     />
 
     <!-- ==================== 外观 ==================== -->
@@ -87,16 +96,19 @@ function reset() {
       <div class="field-grid">
         <div class="field">
           <div class="field-label">主题模式</div>
-          <el-radio-group v-model="appearance.appearance">
+          <el-radio-group v-model="appearance.appearance" :disabled="modeLocked">
             <el-radio-button v-for="o in APPEARANCE_OPTIONS" :key="o.value" :value="o.value">{{ o.label }}</el-radio-button>
           </el-radio-group>
-          <div class="field-tip">选「跟随系统」，电脑切到深色时这里也会跟着变</div>
+          <div v-if="modeLocked" class="field-tip">
+            「{{ currentPreset.name }}」是浅色专用主题，所以这里是锁定的；切回「默认」主题即可使用深色
+          </div>
+          <div v-else class="field-tip">选「跟随系统」，电脑切到深色时这里也会跟着变</div>
         </div>
 
         <div class="field">
           <div class="field-label">界面圆角</div>
           <el-slider v-model="appearance.radius" :min="0" :max="16" :step="2" />
-          <div class="field-tip">按钮、输入框和卡片的圆角（当前 {{ appearance.radius }}px）</div>
+          <div class="field-tip">按钮与输入框 {{ appearance.radius }}px、卡片 {{ cardRadius }}px、标签与滑块 {{ Math.max(2, Math.round(appearance.radius * 0.6)) }}px（同一档位派生出三种尺寸）</div>
         </div>
 
         <div class="field span-2">
@@ -121,40 +133,46 @@ function reset() {
               </span>
             </div>
           </div>
-          <div class="field-tip">按钮、链接和图表的颜色</div>
+          <div class="field-tip">
+            按钮、链接和图表的颜色
+            <template v-if="modeLocked">。「{{ currentPreset.name }}」主题的默认强调色是 {{ currentPreset.accent }}，已自动应用，你也可以改成别的</template>
+          </div>
         </div>
       </div>
     </el-card>
 
-    <!-- ==================== 主题（占位） ==================== -->
+    <!-- ==================== 主题 ==================== -->
     <el-card class="card-theme">
       <template #header>
         <div class="card-head">
           <span>主题</span>
-          <el-tag size="small" type="info" effect="plain">暂未生效</el-tag>
+          <el-tag size="small" type="success" effect="plain">实时生效</el-tag>
         </div>
       </template>
       <div class="theme-grid">
         <div
           v-for="t in THEME_PRESETS"
-          :key="t.value"
+          :key="t.id"
           class="theme-item"
-          :class="{ active: appearance.theme === t.value }"
-          @click="pickTheme(t.value)"
+          :class="{ active: appearance.theme === t.id, todo: !t.ready }"
+          :title="t.ready ? '' : '规划中'"
+          @click="pickTheme(t.id)"
         >
           <div class="theme-preview" :style="{ background: t.colors[1] }">
             <div class="tp-bar" :style="{ background: t.colors[0] }" />
             <div class="tp-line" :style="{ background: t.colors[2], width: '70%' }" />
             <div class="tp-line" :style="{ background: t.colors[2], width: '45%', opacity: 0.5 }" />
             <div class="tp-chip" :style="{ background: t.colors[0] }" />
+            <div v-if="!t.ready" class="tp-todo">规划中</div>
           </div>
           <div class="theme-name">
             {{ t.name }}
-            <el-icon v-if="appearance.theme === t.value" class="theme-check"><svg viewBox="0 0 1024 1024" width="1em" height="1em"><path fill="currentColor" d="M406.656 706.944 195.84 496.256a32 32 0 1 0-45.248 45.248l256 256a32 32 0 0 0 45.248 0l512-512a32 32 0 0 0-45.248-45.248L406.592 706.944Z"/></svg></el-icon>
+            <el-icon v-if="appearance.theme === t.id" class="theme-check"><svg viewBox="0 0 1024 1024" width="1em" height="1em"><path fill="currentColor" d="M406.656 706.944 195.84 496.256a32 32 0 1 0-45.248 45.248l256 256a32 32 0 0 0 45.248 0l512-512a32 32 0 0 0-45.248-45.248L406.592 706.944Z"/></svg></el-icon>
           </div>
           <div class="theme-desc">{{ t.desc }}</div>
         </div>
       </div>
+      <div class="theme-tip">预置主题只做浅色；「默认」是唯一支持深色的主题。切换主题会同时套用该主题的默认强调色与圆角，之后你可以自己调。</div>
     </el-card>
 
     <!-- ==================== 语言 ==================== -->
@@ -293,8 +311,9 @@ function reset() {
 }
 .theme-grid {
   display: grid;
-  /* 固定 2 列：auto-fill 在 ~630px 的卡内宽度下会排成 3 列，4 套主题会掉一个到第二行成为孤行 */
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  /* 主题数会变（现 5 个），别写死列数：
+     auto-fit + 200px 下限在宽屏排成一行、窄屏自动折行，且空轨道会被折叠、卡片自动撑满 */
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
   gap: 12px;
 }
 .theme-item {
@@ -356,6 +375,26 @@ function reset() {
   font-size: 12px;
   color: var(--el-text-color-secondary);
   line-height: 1.6;
+}
+/* 规划中的主题：压暗 + 明确标注，避免点了没反应 */
+.theme-item.todo {
+  opacity: 0.62;
+}
+.tp-todo {
+  position: absolute;
+  right: 6px;
+  bottom: 6px;
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-size: 11px;
+  color: #fff;
+  background: rgba(0, 0, 0, 0.45);
+}
+.theme-tip {
+  margin-top: 10px;
+  font-size: 12px;
+  color: var(--el-text-color-secondary);
+  line-height: 1.7;
 }
 .row {
   display: flex;

@@ -1,0 +1,110 @@
+/* ===== 桥接层：--wb-* → Element Plus 的 --el-* =====
+   只在这里做映射，主题预设与业务组件都不直接改 --el-*。
+   默认值（tokens.css 的 :root）逐条等于 EP 的浅色默认值，`html.dark` 段等于 EP 的深色默认值，
+   所以 `default` 主题下这层映射是**恒等映射**，改动前后观感一致。
+
+   刻意**不**映射的 EP 变量（交给 EP 自己的 light/dark 两套值，避免我们把它锁死）：
+     --el-fill-color-blank / --el-mask-color / --el-disabled-* / --el-color-*（状态色与主色）
+   主色与状态色由 stores/appearance.ts 写在 documentElement 的行内样式上（用户可调），
+   行内优先级高于本文件，因此不会被主题覆盖。 */
+
+:root {
+  /* 页面与表面 */
+  --el-bg-color: var(--wb-surface);
+  --el-bg-color-page: var(--wb-bg);
+  --el-bg-color-overlay: var(--wb-surface-overlay);
+
+  /* 填充梯度 */
+  --el-fill-color: var(--wb-fill);
+  --el-fill-color-light: var(--wb-fill-light);
+  --el-fill-color-lighter: var(--wb-fill-lighter);
+  --el-fill-color-extra-light: var(--wb-fill-extra-light);
+  --el-fill-color-dark: var(--wb-fill-dark);
+  --el-fill-color-darker: var(--wb-fill-darker);
+
+  /* 文字 */
+  --el-text-color-primary: var(--wb-text);
+  --el-text-color-regular: var(--wb-text-regular);
+  --el-text-color-secondary: var(--wb-text-muted);
+  --el-text-color-placeholder: var(--wb-text-faint);
+  --el-text-color-disabled: var(--wb-text-disabled);
+
+  /* 边框 */
+  --el-border-color-darker: var(--wb-border-darker);
+  --el-border-color-dark: var(--wb-border-dark);
+  --el-border-color: var(--wb-border);
+  --el-border-color-light: var(--wb-border-light);
+  --el-border-color-lighter: var(--wb-border-lighter);
+  --el-border-color-extra-light: var(--wb-border-faint);
+
+  /* 阴影 */
+  --el-box-shadow: var(--wb-shadow);
+  --el-box-shadow-light: var(--wb-shadow-light);
+  --el-box-shadow-lighter: var(--wb-shadow-lighter);
+  --el-box-shadow-dark: var(--wb-shadow-dark);
+
+  /* 字体（EP 组件默认用 --el-font-family） */
+  --el-font-family: var(--wb-font-ui);
+
+  /* 圆角：EP 只有这两个是「全局可继承」的（在 :root 声明），其余圆角变量见下方补丁区 */
+  --el-border-radius-base: var(--wb-radius-base);
+  --el-border-radius-small: var(--wb-radius-small);
+}
+
+/* ===== 组件级圆角补丁 =====
+   EP 有一批组件把圆角变量**就地声明在自己身上**，值还是字面量：
+     .el-card{--el-card-border-radius:4px}   .el-popover{--el-popover-border-radius:4px}
+     .el-message-box{--el-messagebox-border-radius:4px}   .el-notification{--el-notification-radius:8px}
+     .el-popper{--el-popper-border-radius:var(--el-popover-border-radius,4px)}   …
+   「就地声明」永远压过从 :root 继承的值 —— 所以在 `html` 行内样式上写这些变量**毫无效果**
+   （2026-09-18 实测：html 上 --el-card-border-radius 是 9px，卡片元素上仍解析成 4px、
+   渲染圆角 4px，即「界面圆角」滑块对卡片从来没生效过）。
+   修法就是在组件选择器上再声明一次：同特异性下后加载者胜（本文件在 EP 的 css 之后导入）。
+
+   ⚠️ 新增 EP 组件的圆角支持时，先确认它是「就地声明」还是「引用 --el-border-radius-base」：
+     引用型（.el-dialog / .el-input / .el-alert / .el-checkbox…）什么都不用做，已自动跟随。
+     就地声明型才需要在这里补一条。排查脚本思路见 交接文档.md「前端变量层」。 */
+
+/* 大表面（卡片 / 对话框 / 气泡卡片 / 确认框 / 通知 / 引导）→ card 档 */
+.el-card {
+  --el-card-border-radius: var(--wb-radius-card);
+}
+.el-dialog {
+  --el-dialog-border-radius: var(--wb-radius-card);
+}
+.el-popover {
+  --el-popover-border-radius: var(--wb-radius-card);
+}
+.el-message-box {
+  --el-messagebox-border-radius: var(--wb-radius-card);
+}
+.el-notification {
+  --el-notification-radius: var(--wb-radius-card);
+}
+.el-tour {
+  --el-tour-border-radius: var(--wb-radius-card);
+}
+
+/* 浮层小菜单（下拉 / 选择器 / 提示）：用 base 档。
+   ⚠️ 必须直接声明 --el-popper-border-radius：EP 给它的默认值是
+   `var(--el-popover-border-radius, 4px)`，而 --el-popover-border-radius 只声明在 .el-popover 上、
+   不是普通 popper 的祖先，取不到就回落成 4px。 */
+.el-popper {
+  --el-popper-border-radius: var(--wb-radius-base);
+}
+
+/* 小控件（标签 / 分页 / 滑块）→ small 档 */
+.el-tag {
+  --el-tag-border-radius: var(--wb-radius-small);
+}
+.el-pagination {
+  --el-pagination-border-radius: var(--wb-radius-small);
+}
+.el-slider {
+  --el-slider-border-radius: var(--wb-radius-small);
+}
+
+/* 刻意不接的：
+   · --el-badge-radius（默认 10px）：徽标是个小胶囊，10px 已经超过它高度的一半，
+     接成 small 档反而会把「99+」变成圆角方块。
+   · .el-drawer：EP 没给它圆角变量（抽屉是贴边整屏的，本来就不圆）。 */

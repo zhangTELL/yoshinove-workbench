@@ -4,7 +4,11 @@ import ElementPlus from 'element-plus'
 import zhCn from 'element-plus/es/locale/lang/zh-cn'
 import 'element-plus/dist/index.css'
 import 'element-plus/theme-chalk/dark/css-vars.css'
-import './styles/theme.css'
+// 变量层三段，顺序不能乱（后者依赖前者，主题要能覆盖契约的默认值）：
+//   tokens.css 语义契约 --wb-* → bridge.css 映射到 EP 的 --el-* → themes/*.css 主题预设
+import './styles/tokens.css'
+import './styles/bridge.css'
+import './styles/themes/macos.css'
 import App from './App.vue'
 import router from './router'
 import { loadDisplayName } from './stores/profile'

@@ -1,0 +1,192 @@
+/* ===== 主题预设：macOS（Apple 风格 + 毛玻璃）=====
+   浅色专用（四套预置主题都不做深色，深色只属于 default 主题）。
+
+   设计意图：像 macOS 的 App 窗口——柔和的渐变"壁纸"打底，侧边栏是半透明材质，
+   内容卡片是不透明白底 + 12px 圆角 + 发丝描边 + 轻阴影，强调色用系统蓝。
+
+   数值依据（均为 MIT，见 主题预设-设计方案.md §2.1）：
+     - 字体栈 / 聚焦环 / 语义色命名法：puruvj/macos-web（src/css/theme.css）
+     - 玻璃的层次观感：rdev/liquid-glass-react
+   本文件只声明值 + 表面规则，不碰 --el-*（映射统一在 bridge.css）。 */
+
+html[data-wb-theme='macos'] {
+  /* ---- 页面底：柔和渐变当"壁纸"。玻璃要有东西可透，底就不能是纯平面 ----
+     浓度是调出来的：太淡则毛玻璃侧栏看起来就是一块灰白（试过一版几乎看不出材质），
+     所以让左上偏蓝、右上偏紫、右下偏青，三块淡染压在浅灰蓝的线性底上 */
+  --wb-bg: #e6ebf4;
+  --wb-bg-image:
+    radial-gradient(1150px 760px at 6% -2%, #b6cdf0 0%, rgba(182, 205, 240, 0) 62%),
+    radial-gradient(980px 680px at 97% 4%, #d9c2ea 0%, rgba(217, 194, 234, 0) 58%),
+    radial-gradient(1150px 880px at 76% 106%, #b3d9e8 0%, rgba(179, 217, 232, 0) 60%),
+    linear-gradient(168deg, #eef2f9 0%, #dde5f1 100%);
+
+  /* ---- 表面 ---- */
+  --wb-surface: #ffffff;
+  /* 浮层：半透明 + 模糊。0.74 在卡片密集的页面会把背后的文字透到能辨认、干扰阅读，
+     0.84 既保留"材质感"又保证表单/菜单的可读性（macOS 的菜单本身也偏不透明） */
+  --wb-surface-overlay: rgba(255, 255, 255, 0.84);
+
+  /* ---- 填充档（macOS 的系统灰）---- */
+  --wb-fill: #efeef2;
+  --wb-fill-light: #f5f5f7; /* systemGray6 */
+  --wb-fill-lighter: #fafafb;
+  --wb-fill-extra-light: #fcfcfd;
+  --wb-fill-dark: #e8e8ec;
+  --wb-fill-darker: #e0e0e5;
+  --wb-fill-blank: #ffffff;
+
+  /* ---- 文字 ---- */
+  --wb-text: #1d1d1f; /* label */
+  --wb-text-regular: #3a3a3c;
+  --wb-text-muted: #6e6e73; /* secondaryLabel */
+  --wb-text-faint: #8e8e93; /* tertiaryLabel */
+  --wb-text-disabled: #aeaeb2;
+
+  /* ---- 边框：macOS 用半透明黑做发丝线，而不是浅灰 ---- */
+  --wb-border-darker: rgba(0, 0, 0, 0.24);
+  --wb-border-dark: rgba(0, 0, 0, 0.16);
+  --wb-border: rgba(0, 0, 0, 0.1);
+  --wb-border-light: rgba(0, 0, 0, 0.08);
+  --wb-border-lighter: rgba(0, 0, 0, 0.06);
+  --wb-border-faint: rgba(0, 0, 0, 0.04);
+
+  /* ---- 阴影：轻、散、无明显方向 ---- */
+  --wb-shadow: 0 10px 30px rgba(0, 0, 0, 0.12), 0 1px 2px rgba(0, 0, 0, 0.06);
+  --wb-shadow-light: 0 4px 16px rgba(0, 0, 0, 0.1);
+  --wb-shadow-lighter: 0 1px 3px rgba(0, 0, 0, 0.08);
+  --wb-shadow-dark: 0 24px 60px rgba(0, 0, 0, 0.22);
+
+  /* ---- 字体：优先系统栈（Windows 上退到 Segoe UI Variable / 微软雅黑）---- */
+  --wb-font-ui: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI Variable Text', 'Segoe UI',
+    'Noto Sans SC', 'Microsoft YaHei', system-ui, sans-serif;
+  --wb-font-display: var(--wb-font-ui);
+  --wb-font-mono: 'SF Mono', ui-monospace, 'Cascadia Mono', Consolas, 'Courier New', monospace;
+
+  /* ---- 质感 ---- */
+  /* 玻璃透明度调到 0.5：0.62 时侧栏看起来就是一块灰白（壁纸的颜色被盖住了），
+     0.5 才能从模糊里透出壁纸的蓝紫，读起来像"材质"而不是"浅色方块" */
+  --wb-glass-bg: rgba(255, 255, 255, 0.5);
+  --wb-glass-border: rgba(255, 255, 255, 0.55);
+  --wb-glass-blur: 22px;
+  --wb-glass-saturate: 180%;
+
+  /* ---- 首页问候条：系统蓝的淡染 ---- */
+  --wb-hero-from: #eaf2ff;
+  --wb-hero-to: #f7faff;
+  --wb-hero-border: rgba(0, 122, 255, 0.18);
+}
+
+/* ==================== 表面规则 ====================
+   ⚠️ 性能约束：backdrop-filter 每帧重采样，**只用在这两类表面**——
+      ① 侧边导航栏（一块，常驻）；② 浮层（对话框/下拉/抽屉，出现在最上层）。
+   卡片头、表格、列表项一律不用；卡片头改用一个"半透明填充"来暗示材质（无模糊、几乎零成本）。
+   选择器统一带 `html[...]` 前缀提高特异性，避免被组件 scoped 样式（.aside[data-v-xxx]）压过。 */
+
+/* ① 侧边导航：毛玻璃（半透明 + 模糊 + 右侧一条高光发丝边，做出"材质边缘"的观感） */
+html[data-wb-theme='macos'] .aside {
+  background: var(--wb-glass-bg);
+  backdrop-filter: blur(var(--wb-glass-blur)) saturate(var(--wb-glass-saturate));
+  -webkit-backdrop-filter: blur(var(--wb-glass-blur)) saturate(var(--wb-glass-saturate));
+  border-right: 1px solid var(--wb-glass-border);
+  box-shadow: inset -1px 0 0 rgba(0, 0, 0, 0.04);
+}
+
+/* ② 浮层：对话框 / 消息框 / 抽屉 / 下拉 —— 半透明底 + 更强的模糊。
+   ⚠️ EP 这几类浮层**各读各的变量**，只改 --wb-surface-overlay 不够：
+     · 下拉/提示那类走 --el-bg-color-overlay（已被桥接 → 自动生效）
+     · .el-dialog 读 --el-dialog-bg-color（默认 var(--el-bg-color)，是不透明的）
+     · .el-drawer 读 --el-drawer-bg-color（默认继承 dialog 的值）
+     · .el-message-box 直接写死 background-color: var(--el-bg-color)
+   实测过：只设 --wb-surface-overlay 时对话框仍是纯白，模糊等于白做。 */
+html[data-wb-theme='macos'] .el-dialog,
+html[data-wb-theme='macos'] .el-message-box,
+html[data-wb-theme='macos'] .el-drawer,
+html[data-wb-theme='macos'] .el-popper {
+  backdrop-filter: blur(28px) saturate(var(--wb-glass-saturate));
+  -webkit-backdrop-filter: blur(28px) saturate(var(--wb-glass-saturate));
+}
+html[data-wb-theme='macos'] .el-dialog {
+  --el-dialog-bg-color: var(--wb-surface-overlay);
+}
+html[data-wb-theme='macos'] .el-drawer {
+  --el-drawer-bg-color: var(--wb-surface-overlay);
+}
+html[data-wb-theme='macos'] .el-message-box {
+  background-color: var(--wb-surface-overlay);
+}
+html[data-wb-theme='macos'] .el-overlay {
+  background-color: rgba(0, 0, 0, 0.28);
+}
+html[data-wb-theme='macos'] .el-drawer__header {
+  background: transparent;
+}
+
+/* 卡片：发丝边（--wb-border-light 已经通过桥接落到 --el-card-border-color）+ 轻阴影 */
+html[data-wb-theme='macos'] .el-card {
+  box-shadow: var(--wb-shadow-lighter);
+  overflow: hidden; /* 让卡片头的半透明填充不越过圆角 */
+}
+/* 卡片头：半透明填充暗示材质（**不用模糊**，避免多卡片页面每帧重采样） */
+html[data-wb-theme='macos'] .el-card__header {
+  background: color-mix(in srgb, var(--wb-fill-light) 72%, transparent);
+  border-bottom-color: var(--wb-border-lighter);
+}
+/* 圆角不在这里写死：它由「界面圆角」滑块统一驱动（契约层 --wb-radius-*，见 tokens.css / bridge.css），
+   主题只负责给出默认档位（见 utils/themePresets.ts 的 radius = 10 → base 10 / small 6 / card 15） */
+
+/* 侧栏菜单：macOS 的辨识特征之一——选中项是**圆角胶囊**，而不是整行铺色或只有文字变色 */
+html[data-wb-theme='macos'] .aside .el-menu-item,
+html[data-wb-theme='macos'] .aside .el-sub-menu__title {
+  height: 34px;
+  line-height: 34px;
+  margin: 2px 8px;
+  border-radius: 7px;
+}
+html[data-wb-theme='macos'] .aside .el-menu-item.is-active {
+  background: rgba(255, 255, 255, 0.82);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06);
+}
+html[data-wb-theme='macos'] .aside .el-sub-menu.is-active > .el-sub-menu__title {
+  color: var(--el-color-primary);
+}
+/* 收起后的子项也缩进对一点，避免胶囊贴边 */
+html[data-wb-theme='macos'] .aside .el-menu--inline .el-menu-item {
+  margin-left: 12px;
+}
+
+/* 表格/描述等块状区域：更接近 macOS 列表的浅灰与发丝分隔 */
+html[data-wb-theme='macos'] .el-table th.el-table__cell {
+  background: color-mix(in srgb, var(--wb-fill-light) 78%, transparent);
+}
+html[data-wb-theme='macos'] .el-table td.el-table__cell,
+html[data-wb-theme='macos'] .el-table th.el-table__cell {
+  border-bottom-color: var(--wb-border-lighter);
+}
+
+/* ---- 降级：不支持 backdrop-filter，或用户要求减少透明度 ---- */
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  html[data-wb-theme='macos'] .aside {
+    background: #f6f7f9;
+  }
+  html[data-wb-theme='macos'] .el-popper,
+  html[data-wb-theme='macos'] .el-dialog,
+  html[data-wb-theme='macos'] .el-drawer,
+  html[data-wb-theme='macos'] .el-message-box {
+    background: var(--wb-surface);
+  }
+}
+@media (prefers-reduced-transparency: reduce) {
+  html[data-wb-theme='macos'] .aside {
+    background: #f6f7f9;
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
+  html[data-wb-theme='macos'] .el-popper,
+  html[data-wb-theme='macos'] .el-dialog,
+  html[data-wb-theme='macos'] .el-drawer,
+  html[data-wb-theme='macos'] .el-message-box {
+    background: var(--wb-surface);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
+}

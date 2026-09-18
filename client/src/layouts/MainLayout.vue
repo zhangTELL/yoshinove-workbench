@@ -7,9 +7,10 @@ import {
   Collection,
   DataAnalysis,
   Football,
+  Grid,
   Histogram,
+  House,
   MagicStick,
-  Menu as MenuIcon,
   Notebook,
   Reading,
   Setting,
@@ -24,6 +25,7 @@ import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import type { Component } from 'vue'
 import { useRoute } from 'vue-router'
 import { get, post } from '../api/http'
+import AppIcon from '../components/AppIcon.vue'
 import { t } from '../locales'
 
 const route = useRoute()
@@ -60,7 +62,8 @@ interface NavGroup {
  * 加页面/分组只动这里（分组还要在对应 View 里加 TABS 常量）。
  */
 const nav: (NavLink | NavGroup)[] = [
-  { kind: 'link', path: '/dashboard', title: '首页', tKey: 'nav.dashboard', icon: MenuIcon },
+  // 首页原先用的是 Menu（汉堡）——语义上像"打开菜单"，和"首页"不对应，换成轮廓房子
+  { kind: 'link', path: '/dashboard', title: '首页', tKey: 'nav.dashboard', icon: House },
   {
     kind: 'group',
     index: 'schedule',
@@ -163,7 +166,10 @@ onUnmounted(() => {
 <template>
   <el-container class="layout">
     <el-aside width="200px" class="aside">
-      <div class="logo">📚 工作台</div>
+      <div class="logo">
+        <AppIcon :icon="Grid" :size="26" />
+        <span class="logo-text">工作台</span>
+      </div>
       <el-menu
         ref="menuRef"
         :default-active="activeMenu"
@@ -209,20 +215,43 @@ onUnmounted(() => {
   flex-direction: column;
 }
 .logo {
-  font-size: 18px;
-  font-weight: 600;
-  padding: 20px 16px;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 18px 14px 16px;
   color: var(--el-text-color-primary);
+}
+.logo-text {
+  font-size: 16px;
+  font-weight: 600;
+  letter-spacing: 0.2px;
 }
 .menu {
   border-right: none;
   flex: 1;
+}
+/* 导航图标：macOS 侧栏里图标的分量比文字大一点，且要和文字有明显呼吸感 */
+.menu :deep(.el-menu-item > .el-icon),
+.menu :deep(.el-sub-menu__title > .el-icon) {
+  font-size: 17px;
+  margin-right: 9px;
+  width: 17px;
+}
+/* 未选中项：图标压到次级灰（macOS 侧栏未选中是 secondaryLabel），选中才给强调色 */
+.menu :deep(.el-menu-item:not(.is-active) > .el-icon),
+.menu :deep(.el-sub-menu__title > .el-icon) {
+  color: var(--el-text-color-secondary);
 }
 /* 子栏目比主导航项略紧凑，形成层级感 */
 .menu :deep(.el-sub-menu .el-menu-item) {
   height: 42px;
   line-height: 42px;
   font-size: 13px;
+}
+.menu :deep(.el-sub-menu .el-menu-item > .el-icon) {
+  font-size: 15px;
+  width: 15px;
+  margin-right: 8px;
 }
 .main {
   padding: 20px;
