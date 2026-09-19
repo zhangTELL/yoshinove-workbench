@@ -66,8 +66,8 @@ function isPicked(n: number): boolean {
   transition: all 0.15s;
 }
 .sp-cell:hover {
-  border-color: var(--el-color-primary);
-  color: var(--el-color-primary);
+  border-color: var(--el-color-primary); /* 边框是"非文字"，主色 3:1 够用 */
+  color: var(--wb-accent-text); /* 文字要 4.5:1，用更暗的变体 */
 }
 .sp-cell.picked {
   background: var(--el-color-primary);

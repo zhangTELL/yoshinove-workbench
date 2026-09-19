@@ -1073,6 +1073,8 @@ onUnmounted(() => {
   background: var(--el-fill-color-light);
 }
 .cat-item.active {
+  /* ⚠️ 下面垫着 --el-color-primary-light-9，主色在上面 4.66 ≥ 4.5 达标，
+     所以保持主色；改用更暗的 --wb-accent-text 反而会掉到 4.49 */
   background: var(--el-color-primary-light-9);
   color: var(--el-color-primary);
   font-weight: 600;
@@ -1100,7 +1102,8 @@ onUnmounted(() => {
   display: inline-flex;
 }
 .cat-actions .el-icon:hover {
-  color: var(--el-color-primary);
+  /* 悬停时是**裸图标**（无浅色底），主色 2.59 不够 3:1，用更暗的变体 */
+  color: var(--wb-accent-text);
 }
 .side-tip {
   margin-top: 10px;
@@ -1218,7 +1221,7 @@ onUnmounted(() => {
   color: var(--el-text-color-secondary);
 }
 .pc-branch {
-  font-family: ui-monospace, Consolas, monospace;
+  font-family: var(--wb-font-mono);
 }
 .pc-actions {
   display: flex;
@@ -1483,7 +1486,7 @@ onUnmounted(() => {
 .rule-pattern {
   flex: 1;
   font-size: 13px;
-  font-family: Consolas, monospace;
+  font-family: var(--wb-font-mono);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -1532,7 +1535,7 @@ onUnmounted(() => {
 .loc-path {
   flex: 1;
   font-size: 13px;
-  font-family: Consolas, monospace;
+  font-family: var(--wb-font-mono);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;

@@ -368,6 +368,8 @@ function reset() {
   gap: 4px;
 }
 .theme-check {
+  /* 勾选标记落在白色卡面上，但属于**卡片选中的状态提示**、旁边还有"卡片本身的高亮描边"在表达选中，
+     所以这里保持主色不动（改暗会让"已选中"的观感变闷） */
   color: var(--el-color-primary);
 }
 .theme-desc {

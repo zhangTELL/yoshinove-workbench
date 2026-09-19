@@ -74,6 +74,35 @@ html[data-wb-theme='macos'] {
   --wb-hero-from: #eaf2ff;
   --wb-hero-to: #f7faff;
   --wb-hero-border: rgba(0, 122, 255, 0.18);
+
+  /* ---- 强调色文字 + 图表色板 ----
+     色板按 Apple 系统色的**深色档**取（Apple 的亮色档画在浅底上对比度不够），
+     实测：系列最低对比度 4.40、两两最小距离 73.6、强调文字在卡片/纸底/浅底上都 ≥4.5 */
+  --wb-accent-text: #0062cf;
+  --wb-chart-1: #1d6ae5;
+  --wb-chart-2: #248a3d;
+  --wb-chart-3: #c93400;
+  --wb-chart-4: #d70050;
+  --wb-chart-5: #6b4be0;
+  --wb-chart-6: #9b2fa8;
+  --wb-chart-7: #8a5a00;
+  --wb-chart-8: #5a5a63;
+  --wb-chart-safe: #3e8e41;
+  --wb-chart-warn: #ab6a00;
+  --wb-chart-danger: #c7463a;
+  --wb-chart-safe-text: #2e7d32;
+  --wb-chart-warn-text: #a15c00;
+  --wb-chart-danger-text: #c0392b;
+
+  /* ---- 状态色（契约层，见 tokens.css）----
+     色块族取 Apple 系统色里够深但**不闷**的绿/琥珀档（原来那版墨绿太沉）；
+     文字族再深一档以满足 4.5:1 */
+  --wb-success: #3e8e41;
+  --wb-warning: #ab6a00;
+  --wb-danger: #c7463a;
+  --wb-success-light-9: #ecf4ec;
+  --wb-warning-light-9: #f7f2e8;
+  --wb-danger-light-9: #f9eceb;
 }
 
 /* ==================== 表面规则 ====================

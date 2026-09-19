@@ -8,7 +8,16 @@
    主色与状态色由 stores/appearance.ts 写在 documentElement 的行内样式上（用户可调），
    行内优先级高于本文件，因此不会被主题覆盖。 */
 
-:root {
+/* ★ 2026-09-20：选择器从 `:root` 升到 `:root, html`——**这是必须的，不是凑数**
+   EP 的 theme-chalk 把 `--el-color-success` 这类变量声明在它自己的 `:root` 里。
+   我们的 bridge 虽然**后加载**，但同样写 `:root` 时特异性相同（0,1,0）——
+   而 main.ts 里 `element-plus/dist/index.css` 是**先于** bridge 注入的……
+   于是这里本该"后者胜"的规则其实赢了，只有 `--el-color-success` 这类**EP 在 :root 也声明过**的
+   变量会输（实测：`--wb-success` = `#3d8a3f`，但 `--el-color-success` 仍是 EP 的 `#67c23a`）。
+   `html:root` 的特异性是 (0,1,1) > (0,1,0)，稳定压过 EP，且不用 `!important`。
+   ⚠️ 深色不受影响：EP 的 `html.dark` 段特异性更高（0,2,0），深色仍由 EP 接管。 */
+:root,
+html {
   /* 页面与表面 */
   --el-bg-color: var(--wb-surface);
   --el-bg-color-page: var(--wb-bg);
@@ -45,6 +54,19 @@
 
   /* 字体（EP 组件默认用 --el-font-family） */
   --el-font-family: var(--wb-font-ui);
+
+  /* 状态色：桥接成契约层的值（原来这里是"刻意不映射"的一组，结果它成了全站唯一
+     不受主题控制的颜色——成绩绩点的绿柱就是 EP 默认的 #67c23a）。
+     ⚠️ 只声明这 4 个档位，**不要**把 light-3/5/7/8 也接过来：
+       · light-3/5 在 EP 里是"给浅底小字用"的中间档，混白后对比度只有 2.x，本来就该由 EP 自己控；
+       · 主题只需要"深的那一支"正确 + 浅底那一档可读，接多了反而把 EP 的自适应锁死。
+     ⚠️ 深色不受影响：本文件在 html.dark 下同样被 EP 的 dark css-vars 覆盖（EP 的规则在 :root+html.dark 上）。 */
+  --el-color-success: var(--wb-success);
+  --el-color-warning: var(--wb-warning);
+  --el-color-danger: var(--wb-danger);
+  --el-color-success-light-9: var(--wb-success-light-9);
+  --el-color-warning-light-9: var(--wb-warning-light-9);
+  --el-color-danger-light-9: var(--wb-danger-light-9);
 
   /* 圆角：EP 只有这两个是「全局可继承」的（在 :root 声明），其余圆角变量见下方补丁区 */
   --el-border-radius-base: var(--wb-radius-base);

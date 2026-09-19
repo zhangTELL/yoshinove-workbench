@@ -483,7 +483,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
     <el-dialog v-model="previewVisible" :title="`预览：${title || '未命名'}（${themeName || '默认样式'}）`" width="80%" top="3vh" destroy-on-close>
       <iframe
         :srcdoc="previewHtml"
-        style="width: 100%; height: 76vh; border: 1px solid var(--el-border-color); border-radius: 6px; background: var(--el-bg-color)"
+        style="width: 100%; height: 76vh; border: 1px solid var(--el-border-color); border-radius: var(--wb-radius-card); background: var(--el-bg-color)"
       />
     </el-dialog>
   </div>
@@ -531,6 +531,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
   background: var(--el-fill-color-light);
 }
 .filter-item.active {
+  /* ⚠️ 下面垫着 --el-color-primary-light-9：主色 4.66 达标，保持不动 */
   background: var(--el-color-primary-light-9);
   color: var(--el-color-primary);
   font-weight: 600;

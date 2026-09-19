@@ -14,7 +14,9 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { Delete, Plus, Refresh } from '@element-plus/icons-vue'
 import { useRoute, useRouter } from 'vue-router'
 import { del, get, post, put } from '../api/http'
-import { chartPalette } from '../utils/chartTheme'
+// ⚠️ 必须用别名导入：本文件里已有一个叫 `chartSeries` 的 computed（余额历史序列，见下面 251 行附近），
+//    同名会**整体遮蔽**这个 import（而且 TDZ 下调用会直接 ReferenceError）
+import { chartPalette, chartSeries as chartSeriesColors } from '../utils/chartTheme'
 import { wrapPreviewDoc } from '../utils/previewDoc'
 
 // ==================== 板块切换（由左侧主导航的折叠分组驱动）====================
@@ -421,8 +423,23 @@ function chartOf(el: HTMLDivElement | undefined): echarts.ECharts | null {
   return c
 }
 
-/** 多平台折线共用的调色板 */
-const SERIES_COLORS = ['#378ADD', '#5DCAA5', '#EF9F27', '#D4537E', '#7F77DD', '#639922', '#D85A30', '#888780']
+/**
+ * 多平台折线/多系列柱共用的色板。
+ *
+ * ★ 2026-09-20：原先是写死的 8 个色值（`['#378ADD', …]`），切主题时坐标轴/图例跟着变、**柱子却是死的**，
+ * 等于"半换肤"。现在从契约层 `--wb-chart-1..8` 现读（见 utils/chartTheme.ts）：
+ * 四套主题的色板都实测过对比度 ≥3:1、两两距离 ≥45（色觉友好基准色相）。
+ * **每次渲染调用**（不是模块级常量）——echarts 是 canvas，不认 CSS 变量，必须现取。
+ */
+function seriesColors(): string[] {
+  return chartSeriesColors()
+}
+
+/** 阈值三档（危险 / 警告 / 安全）：给"剩余天数"这类按数值分档上色的图 */
+function semanticColors() {
+  const p = chartPalette()
+  return { danger: p.dangerColor, warn: p.warnColor, safe: p.safeColor }
+}
 
 /** 余额走势：面积图（面积填充对「水平随时间变化」的读法比纯折线直观） */
 function renderTrend() {
@@ -430,8 +447,9 @@ function renderTrend() {
   const S = stylePreset()
   if (!c) return
   const sym = CURRENCY_SYMBOL[analysisCurrency.value] ?? ''
+  const palette = seriesColors()
   const series = chartSeries.value.map((s, i) => {
-    const color = SERIES_COLORS[i % SERIES_COLORS.length]
+    const color = palette[i % palette.length]
     return {
       name: s.name,
       type: 'line' as const,
@@ -454,7 +472,7 @@ function renderTrend() {
   })
   c.setOption(
     {
-      color: SERIES_COLORS,
+      color: palette,
       tooltip: {
         ...S.TOOLTIP,
         trigger: 'axis',
@@ -526,10 +544,13 @@ function renderDaily() {
         {
           type: 'bar',
           barMaxWidth: 26,
-          // 消耗越高的柱子越深，一眼看出哪天烧得多
+          // 消耗越高的柱子越深，一眼看出哪天烧得多（颜色同样跟着主题走）
           data: items.map((d) => ({
             value: d.value,
-            itemStyle: { color: max > 0 && d.value / max > 0.6 ? '#EF9F27' : '#85B7EB', borderRadius: [3, 3, 0, 0] },
+            itemStyle: {
+              color: max > 0 && d.value / max > 0.6 ? seriesColors()[2] : seriesColors()[0],
+              borderRadius: [3, 3, 0, 0],
+            },
           })),
         },
       ],
@@ -548,7 +569,8 @@ function renderBurn() {
     c.clear()
     return
   }
-  const colorOf = (d: number) => (d < 7 ? '#E24B4A' : d < 30 ? '#EF9F27' : '#1D9E75')
+  const sem = semanticColors()
+  const colorOf = (d: number) => (d < 7 ? sem.danger : d < 30 ? sem.warn : sem.safe)
   c.setOption(
     {
       tooltip: {
@@ -641,7 +663,7 @@ function renderQuota() {
           stack: 'q',
           barMaxWidth: 24,
           data: items.map((q) => q.usedPct),
-          itemStyle: { color: '#EF9F27' },
+          itemStyle: { color: seriesColors()[2] },
           label: { show: true, fontSize: 10, color: '#fff', formatter: '{c}%' },
         },
         {
@@ -649,7 +671,7 @@ function renderQuota() {
           type: 'bar',
           stack: 'q',
           data: items.map((q) => q.remainPct),
-          itemStyle: { color: '#85B7EB', borderRadius: [0, 4, 4, 0] },
+          itemStyle: { color: seriesColors()[0], borderRadius: [0, 4, 4, 0] },
         },
       ],
     },
@@ -1511,7 +1533,7 @@ function onThemeChange() {
   background: var(--el-fill-color-extra-light);
 }
 .bal-card.add:hover {
-  color: var(--el-color-primary);
+  color: var(--wb-accent-text);
 }
 .bc-head {
   display: flex;
@@ -1534,7 +1556,7 @@ function onThemeChange() {
 .bc-value {
   font-size: 30px;
   font-weight: 700;
-  color: var(--el-color-primary);
+  color: var(--wb-accent-text);
   line-height: 1.1;
   font-variant-numeric: tabular-nums;
 }
@@ -1723,7 +1745,9 @@ function onThemeChange() {
   font-variant-numeric: tabular-nums;
 }
 .an-stat-num.is-warn {
-  color: #e24b4a;
+  /* 用 EP 的语义变量而不是写死 #e24b4a：那支红是"另一个设计系统"的红，
+     换主题/换状态色时它会留在原地（同 `.cal-cell.checked` 那个写死的浅绿是一个毛病） */
+  color: var(--el-color-danger);
 }
 .an-stat-unit {
   font-size: 14px;
@@ -1803,7 +1827,7 @@ function onThemeChange() {
   white-space: nowrap;
 }
 .pl-item.active .pl-name {
-  color: var(--el-color-primary);
+  color: var(--wb-accent-text);
 }
 .pl-meta {
   font-size: 11px;

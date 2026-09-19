@@ -89,6 +89,35 @@ html[data-wb-theme='claude'] {
   --wb-hero-from: #fbf2ed;
   --wb-hero-to: #fdfaf6;
   --wb-hero-border: #f0e0d5;
+
+  /* ---- 强调色文字 + 图表色板 ----
+     色板是"暖、低饱和"的一支（与 macOS 那套彩色刻意拉开），因为 Claude 的界面本身很克制；
+     实测：系列最低对比度 3.22、两两最小距离 47.7、强调文字在卡片/纸底/浅底上都 ≥4.5 */
+  --wb-accent-text: #b0542f;
+  --wb-chart-1: #4a6fa5;
+  --wb-chart-2: #3d7a5f;
+  --wb-chart-3: #b08a2e;
+  --wb-chart-4: #9c4a6b;
+  --wb-chart-5: #77569b;
+  --wb-chart-6: #55701f;
+  --wb-chart-7: #b85c38;
+  --wb-chart-8: #6b6b63;
+  --wb-chart-safe: #4a8f6e;
+  --wb-chart-warn: #b5811f;
+  --wb-chart-danger: #b8463a;
+  --wb-chart-safe-text: #2f6b4f;
+  --wb-chart-warn-text: #9b6b14;
+  --wb-chart-danger-text: #a8382a;
+
+  /* ---- 状态色（契约层，见 tokens.css）----
+     色块族是暖化的"低饱和墨绿/赭黄/暖红"（与冷绿刻意拉开，融进暖纸底）；
+     文字族深一档。2026-09-20 第二版：色块档特意提亮——第一版偏墨绿，用户反馈"看着很累" */
+  --wb-success: #4a8f6e;
+  --wb-warning: #b5811f;
+  --wb-danger: #b8463a;
+  --wb-success-light-9: #edf4f0;
+  --wb-warning-light-9: #f8f3ea;
+  --wb-danger-light-9: #f8edeb;
 }
 
 /* ==================== 图标语言（与 macOS 主题刻意拉开）====================
@@ -96,15 +125,18 @@ html[data-wb-theme='claude'] {
    同一套组件两种处理，靠的就是下面这几条覆盖（AppIcon.vue 内部是 scoped 样式，
    选择器带 html[data-wb-theme] 后特异性更高，能稳定压过它）。 */
 
-/* ① logo：去掉色块，直接让官方星芒以赭橘色裸着站——Claude 侧栏本来就是一个字标 + 一个标 */
+/* ① logo：去掉色块，直接让官方星芒以赭橘色裸着站——Claude 侧栏本来就是一个字标 + 一个标。
+   ⚠️ 必须**显式**把这四个 token 都改掉（不能只写 background: none）：
+      首页快捷入口会行内给 --sc-from / --sc-to，而 AppIcon 的底色与高光都读 --ai-*，
+      只压 background 是压不住变量的，色块照样会画出来。 */
 html[data-wb-theme='claude'] .logo .app-icon {
-  background: none;
+  --ai-bg: none;
+  --ai-glyph: var(--el-color-primary);
+  --ai-from: unset;
+  --ai-to: unset;
+  --ai-glow: transparent; /* 去掉 macOS 那层镜面高光 */
   box-shadow: none;
-  color: var(--el-color-primary);
   border-radius: 0;
-}
-html[data-wb-theme='claude'] .logo .app-icon::before {
-  display: none; /* 去掉 macOS 那层镜面高光 */
 }
 html[data-wb-theme='claude'] .logo .app-icon .app-icon__glyph {
   /* 没有色块兜底，字形要占满整个盒子，否则 26px 的框里只有 14px 的线 */
@@ -113,16 +145,23 @@ html[data-wb-theme='claude'] .logo .app-icon .app-icon__glyph {
 
 /* ② 快捷入口：扁平淡暖底 + 细线字形 + 小圆角（不再用渐变 squircle）。
    用容器限定（而不是 :not(.logo *) 这类复杂选择器）——同主题下两个位置的处理本来就不同，
-   选择器说清楚"哪个位置"最不容易出错。 */
+   选择器说清楚"哪个位置"最不容易出错。
+
+   ⚠️ 2026-09-20 修正：这几条原来只有 background / color / 内描边，**不够**——
+     模板当时把渐变色用 AppIcon 的 from/to props 传进来，落到元素上是**行内**声明，
+     而底色与镜面高光都读那两个变量（行内优先级最高）⇒ 本段完全白写：
+     侧栏 logo 已经换成裸线了，首页这 6 个入口还是彩虹方块。
+     现在调用方改成传上下文变量 --sc-from / --sc-to，外观全由 --ai-* 决定 ⇒ 主题必须把这一组一并改掉。
+     底色/字形用**显式值**（不要用 unset）：unset 会让它回落到 :root 的默认渐变，色块又回来了。 */
 html[data-wb-theme='claude'] .sc-item .app-icon {
   /* 配色不再逐个入口不同：Claude 的界面是单色图标语言 */
-  background: color-mix(in srgb, var(--el-color-primary) 8%, var(--wb-surface));
-  color: var(--el-color-primary);
+  --ai-bg: color-mix(in srgb, var(--el-color-primary) 8%, var(--wb-surface));
+  --ai-glyph: var(--el-color-primary);
+  --ai-from: unset;
+  --ai-to: unset;
+  --ai-glow: transparent; /* 没有色块，顶部镜面高光也要一起去掉，否则裸字形上多一道白光 */
   box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--el-color-primary) 22%, transparent);
   border-radius: 8px;
-}
-html[data-wb-theme='claude'] .sc-item .app-icon::before {
-  display: none;
 }
 /* 淡底 + 细线比"实底 + 白字形"看起来更小，所以字形略微放大找补光学重量 */
 html[data-wb-theme='claude'] .sc-item .app-icon .app-icon__glyph {

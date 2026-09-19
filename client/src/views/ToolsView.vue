@@ -6,7 +6,7 @@ import { ElMessage, ElMessageBox, ElNotification } from 'element-plus'
 import { Delete, Edit, Plus, Upload } from '@element-plus/icons-vue'
 import { useRoute, useRouter } from 'vue-router'
 import { del, get, post, put, upload } from '../api/http'
-import { chartPalette } from '../utils/chartTheme'
+import { chartAlertColor, chartBarColor, chartPalette } from '../utils/chartTheme'
 
 // ==================== 工具页布局 ====================
 // 栏目切换由左侧主导航的「日常工具」折叠分组控制，本页只按 ?tab= 渲染对应板块
@@ -268,8 +268,12 @@ function renderRunCharts() {
                 yAxisIndex: 1,
                 smooth: true,
                 symbolSize: 4,
-                itemStyle: { color: p.success },
-                lineStyle: { color: p.success, width: 2 },
+                /* 2026-09-20：与「里程」同为**主题数据色**的两个档（里程 = accent 85%，
+                   步数 = accent 的柔化浅档），不再用绿色的语义色——两套轴上的两条系列
+                   都是"数据"，不是"好/坏"，语义绿留给真正的阈值图（见 chartBarColor 注释）。
+                   两条线靠"深浅 + 圆点/线型 + 双轴刻度"区分，另有图例与 tooltip。 */
+                itemStyle: { color: chartBarColor(0.45) },
+                lineStyle: { color: chartBarColor(0.45), width: 2 },
                 data: stepData,
               },
             ]
@@ -472,7 +476,8 @@ async function renderScoreCharts() {
         {
           type: 'bar',
           barWidth: '55%',
-          itemStyle: { color: p.accent, borderRadius: [4, 4, 0, 0] },
+          // 与「各课程成绩」同一支柔化色，两张图看起来才是一套
+          itemStyle: { color: chartBarColor(), borderRadius: [4, 4, 0, 0] },
           data: bins.map((b) => rows.filter((r) => r.score >= b.min && r.score < b.max).length),
         },
       ],
@@ -516,9 +521,29 @@ async function renderScoreCharts() {
     const height = Math.max(220, sorted.length * 26 + 60)
     courseChartEl.value!.style.height = `${height}px`
     courseChart.resize()
+    /* "低于平均分"的对照线：用户 2026-09-20 要求把"不及格才变色"改成"低于平均分就变色"。
+       平均分按当前筛选范围算（`rows` 已经是筛选后的集合，与图表同源），保留 1 位小数。
+       浮点相等的情况（正好等于平均分）**不变色**，避免"平均分那一门"来回跳。 */
+    const avg = rows.length ? rows.reduce((s, r) => s + r.score, 0) / rows.length : 0
+    const avgText = avg.toFixed(1)
     courseChart.setOption({
       title: { text: '各课程成绩', left: 'center', textStyle: { fontSize: 13, color: p.text1 } },
-      tooltip: {},
+      tooltip: {
+        formatter: (ps: unknown) => {
+          const arr = ps as { dataIndex: number }[]
+          const r = sorted[arr[0].dataIndex]
+          if (!r) return ''
+          const below = r.score < avg
+          return [
+            `<b>${r.courseName}</b>`,
+            `成绩：${r.score}${below ? `（低于平均分 ${avgText}）` : ''}`,
+            r.semester ? `学期：${r.semester}` : '',
+            r.credit ? `学分：${r.credit}` : '',
+          ]
+            .filter(Boolean)
+            .join('<br/>')
+        },
+      },
       grid: { left: 130, right: 40, top: 36, bottom: 28 },
       xAxis: { type: 'value', max: 100, axisLabel: { color: p.text2 }, splitLine: { lineStyle: { color: p.border } } },
       yAxis: {
@@ -533,9 +558,33 @@ async function renderScoreCharts() {
           label: { show: true, position: 'right', fontSize: 11, color: p.text2 },
           itemStyle: {
             borderRadius: [0, 4, 4, 0],
-            color: (q: { value: number }) => (q.value < 60 ? p.danger : q.value < 80 ? p.warning : p.success),
+            /* ★ 2026-09-20 第三版（用户三轮反馈逐步收敛）：
+               ① 主数据柱 = **主题强调色柔化 50%**（accent 混 surface），不再整屏一个饱和绿；
+               ② 低于平均分的柱子 = **accent 同族但色相偏转 + 降饱和的柔化档**（chartAlertColor），
+                  不再四套共用一支琥珀——"四个主题的低分柱都是琥珀色"本身就是没主题化的表现。
+                  为什么不用"主题危险色"：纸页主题的 accent 是印章红、danger 也是红，
+                  两者柔化后色差只有 9.3，低分柱会直接消失（见 chartAlertColor 的注释）；
+               ③ 两者都柔化到同一档，**明度关系一致**，差异只在色相上；
+               ④ 另加一条**平均分虚线**：让"低于平均分"这个口径看得见（颜色不再是唯一线索）。 */
+            color: (q: { value: number }) =>
+              q.value < avg ? chartAlertColor(0.5) : chartBarColor(0.5, p.accent),
           },
           data: sorted.map((r) => r.score),
+          /* 平均分参考线：有了它，"低于平均分"才是一个**看得见的口径**，
+             否则用户只能从颜色反推阈值。虚线用主题边框色，标注压在顶边。
+             ⚠️ 数据全是整数、平均分带小数，所以线会落在两根柱子刻度之间（这正是想要的暗示）。 */
+          markLine: {
+            silent: true,
+            symbol: 'none',
+            data: [{ xAxis: Number(avgText) }],
+            lineStyle: { color: p.border, type: 'dashed', width: 1 },
+            label: {
+              position: 'end',
+              formatter: `平均 ${avgText}`,
+              fontSize: 10,
+              color: p.text3,
+            },
+          },
         },
       ],
     })
@@ -1057,7 +1106,7 @@ function onWindowResize() {
 .stat-num {
   font-size: 26px;
   font-weight: 700;
-  color: var(--el-color-primary);
+  color: var(--wb-accent-text);
 }
 .stat-label {
   font-size: 12px;
@@ -1195,7 +1244,9 @@ function onWindowResize() {
   user-select: none;
 }
 .cal-cell.checked {
-  background: #f0f9eb;
+  /* 原来是写死的 #f0f9eb（EP 默认绿 palette 的浅档），换个主题就露出不属于该主题的绿；
+     color-mix 从当前状态色现算浅底，跟得上主题 */
+  background: color-mix(in srgb, var(--el-color-success) 12%, var(--el-bg-color));
   border: 1px solid var(--el-color-success);
 }
 .cal-cell.today {
@@ -1229,7 +1280,7 @@ function onWindowResize() {
 .cd-num {
   font-size: 34px;
   font-weight: 700;
-  color: var(--el-color-primary);
+  color: var(--wb-accent-text);
 }
 .cd-num.today {
   font-size: 22px;

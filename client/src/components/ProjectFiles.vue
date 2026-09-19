@@ -654,7 +654,9 @@ watch([mode, () => current.value?.rel], async () => {
   flex: none;
 }
 .pf-node.dir .pf-node-icon {
-  color: var(--el-color-primary);
+  /* 目录图标（非文字元素）用强调色的文字变体：主色 #409eff 在白底上只有 2.59，
+     低于图标类"非文字对比度"要求的 3:1，换更暗的一档才稳 */
+  color: var(--wb-accent-text);
 }
 .pf-node-name {
   overflow: hidden;
@@ -864,7 +866,7 @@ watch([mode, () => current.value?.rel], async () => {
   flex: none;
   width: 20px;
   text-align: center;
-  font-family: Consolas, monospace;
+  font-family: var(--wb-font-mono);
   font-weight: 700;
   color: var(--el-color-warning);
 }

@@ -185,6 +185,8 @@ onMounted(load)
   display: inline-flex;
 }
 .oia :deep(.oia-active) {
+  /* ⚠️ 下面垫着 --el-color-primary-light-9，属于"浅色强调底"，
+     主色在这个底上 4.66 ≥ 4.5 达标（改用更暗的 --wb-accent-text 会降到 4.49 差一点） */
   background: var(--el-color-primary-light-9);
   color: var(--el-color-primary);
   font-weight: 600;

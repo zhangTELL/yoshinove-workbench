@@ -84,6 +84,36 @@ html[data-wb-theme='paper'] {
   /* ---- 胶囊档：纸面上没有胶囊（拼合按钮等一律方角）---- */
   --wb-radius-pill: 0px;
 
+  /* ---- 强调色文字 + 图表色板 ----
+     印在纸上的几色油墨：靛蓝 / 墨绿 / 赭黄 / 紫红 / 紫 / 橄榄 / 砖红 / 墨黑。
+     为拿到足够的"两两可分"（最小距离 53.4）比 tufte 那种极致淡雅略浓一点，
+     但仍是低饱和的墨色系。实测：系列最低对比度 3.61、强调文字三处都 ≥4.5 */
+  --wb-accent-text: #9e2027;
+  --wb-chart-1: #3f6a9c;
+  --wb-chart-2: #2e7f5a;
+  --wb-chart-3: #a87c10;
+  --wb-chart-4: #a63a66;
+  --wb-chart-5: #7e4a93;
+  --wb-chart-6: #5c7a22;
+  --wb-chart-7: #9c5330;
+  --wb-chart-8: #2e2e28;
+  --wb-chart-safe: #3d8560;
+  --wb-chart-warn: #96700f;
+  --wb-chart-danger: #ba3a32;
+  --wb-chart-safe-text: #27714e;
+  --wb-chart-warn-text: #8f6a0e;
+  --wb-chart-danger-text: #b7282e;
+
+  /* ---- 状态色（契约层，见 tokens.css）----
+     墨绿 / 赭黄 / 印章红——色块族比第一版提亮一档（第一版太沉，用户反馈累眼），
+     但仍是"印刷油墨"的调子；文字族用深档 */
+  --wb-success: #3d8560;
+  --wb-warning: #96700f;
+  --wb-danger: #ba3a32;
+  --wb-success-light-9: #ecf3ef;
+  --wb-warning-light-9: #f5f1e7;
+  --wb-danger-light-9: #f8eceb;
+
   /* ---- 纸感细节用的"纸张厚度"配方（下面是"贴在纸上的纸片"共用的一套阴影）----
      思路：先用两条 1px 实色线画出**纸的边缘**（第二层比第一层更淡，形成厚度感），
      再补一道很短、很收的落影。比单纯一道柔和阴影更像"纸"，因为纸是有厚度的实体、
@@ -253,20 +283,21 @@ html[data-wb-theme='paper'] .el-tag {
    macOS 那套是「彩色渐变 + 圆角方形 + 白色字形」，Claude 是「细线 + 淡暖底」，
    paper 则更彻底：**连底都不要，只有一支墨线**——像手绘在纸上的记号。
    靠 container 限定选择器区分位置，覆盖必须带 html[data-wb-theme] 前缀（AppIcon 内部是 scoped 样式）。 */
+/* 纸面上连"底"都不要——所以这里必须**显式把 AppIcon 的四个外观 token 一起改掉**，
+   不能只写 `background: none`：快捷入口的色块与顶部高光都读 --ai-*（其中 --sc-from / --sc-to
+   还是 DashboardView 行内给的，CSS 压不过行内变量），只压 background 的话彩虹方块会照旧留在首页。
+   2026-09-20 修正：本次就是发现"侧栏 logo 已经变成墨线、首页却是彩色方块"才回头改的。 */
 html[data-wb-theme='paper'] .logo .app-icon,
 html[data-wb-theme='paper'] .sc-item .app-icon {
-  background: none;
+  --ai-bg: none;
+  --ai-glyph: var(--wb-text);
+  --ai-from: unset;
+  --ai-to: unset;
+  --ai-glow: transparent; /* 去掉 macOS 那层镜面高光（没有色块时它会变成一道白光） */
   box-shadow: none;
   border-radius: 0;
-  color: var(--wb-text);
 }
-html[data-wb-theme='paper'] .logo .app-icon::before,
-html[data-wb-theme='paper'] .sc-item .app-icon::before {
-  display: none; /* 去掉 macOS 那层镜面高光 */
-}
-html[data-wb-theme='paper'] .logo .app-icon .app-icon__glyph {
-  font-size: calc(var(--ai-size) * 0.9);
-}
+html[data-wb-theme='paper'] .logo .app-icon .app-icon__glyph,
 html[data-wb-theme='paper'] .sc-item .app-icon .app-icon__glyph {
   /* 没有色块兜底，字形要占满盒子，否则 30px 的框里只有 16px 的线 */
   font-size: calc(var(--ai-size) * 0.72);

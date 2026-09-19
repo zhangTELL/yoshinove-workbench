@@ -195,6 +195,9 @@ const todayItems = computed<TodayItem[]>(() => {
       name: c.name,
       teacher: c.teacher,
       room: s.room,
+      /* 课程色来自课表配置（用户自己设的颜色）；无颜色时才用默认蓝。
+         这里**刻意**保持字面色值：它会被当作行内 background 用（.cls-bar），
+         写 var() 会依赖变量在绘制时被解析，收益极小、可读性反而变差。 */
       color: c.color || '#409eff',
       startSection: s.startSection,
       endSection: s.endSection,
@@ -335,14 +338,33 @@ async function loadRuns() {
  * 而不是清一色的强调色——那才是 Mac 的观感。渐变是"上浅下深"，白色字形压在中间色上。
  *
  * `icon` 是**逻辑图标名**（不是组件），具体用哪套图标由当前主题决定：
- * Claude 主题会换成一套细线图标 + 无渐变的暖色处理，见 utils/themeIcons.ts 与 themes/claude.css。
+ * Claude / paper 主题会整块换成「细线字形 + 无渐变色块」，
+ * 见 utils/themeIcons.ts 与 themes/claude.css、themes/paper.css 的「图标语言」段。
  */
 interface Shortcut {
   path: string
   title: string
   hint: string
   icon: IconKey
-  /** 图标渐变的上浅/下深两色 */
+  /**
+   * 该入口的"系统色"（快捷入口的六色辨识度就来自它）。
+   *
+   * ⚠️ 2026-09-20 修正：这里原来直接用 from / to 两个字段，把渐变色塞进 `AppIcon` 的 **props**。
+   * props 落到组件上是**行内声明**（优先级最高、CSS 压不过），于是 claude / paper 主题里
+   * 「去掉色块、只留细线字形」那两条规则**永远失效**——侧栏 logo 已经换成裸线了，
+   * 首页这 6 个入口却还是彩虹方块。
+   *
+   * 修法不是"砍掉颜色"，而是**换交付方式**：色值一个都不少，但由模板写成
+   * **上下文变量**（`--sc-from` / `--sc-to`，行内变量同样压过其它规则、语义正合这两套主题的意：
+   * 默认 / macOS 保留六色），而 AppIcon 只在"上下文给了变量"时才用它们画渐变 ——
+   * 于是主题可以在 `.sc-item .app-icon` 上把 `--ai-bg` / `--ai-glow` 换成自己的值，
+   * 一次性把色块与高光都去掉（见 themes/claude.css、paper.css 的「图标语言」段）。
+   *
+   * ⚠️ 为什么保留"两个色"而不是压成"一个色 + 统一压暗系数"：原设计的 to 是**逐个调过**的
+   * （`#FFC43D → #C97C00` 比 `#4B9BFF → #0A5FC8` 压得重得多），
+   * 换成统一系数后我实测截图对比，笔记/AI 那几支明显变浅 ⇒ 默认主题的观感就被改掉了。
+   * 现在 from / to 原样保留，默认主题**逐色一致**。
+   */
   from: string
   to: string
 }
@@ -625,7 +647,13 @@ onMounted(loadAll)
       <template #header>快捷入口</template>
       <div class="sc-grid">
         <button v-for="s in shortcuts" :key="s.path" class="sc-item" @click="go(s.path)">
-          <AppIcon :icon="themedIcon(s.icon)" :size="30" :from="s.from" :to="s.to" />
+          <!-- 颜色走**上下文变量**，不走 props：props 会成为行内声明，
+               预设主题就只能干瞪眼（详见 Shortcut 接口上的说明） -->
+          <AppIcon
+            :icon="themedIcon(s.icon)"
+            :size="30"
+            :style="{ '--sc-from': s.from, '--sc-to': s.to }"
+          />
           <div class="sc-body">
             <div class="sc-title">{{ s.title }}</div>
             <div class="sc-hint">{{ s.hint }}</div>
@@ -674,7 +702,7 @@ onMounted(loadAll)
   transition: color 0.15s, border-color 0.15s;
 }
 .name-text:hover {
-  color: var(--el-color-primary);
+  color: var(--wb-accent-text); /* 小字用更暗的强调色变体，主色对比度不够（见 tokens.css） */
   border-bottom-color: color-mix(in srgb, var(--el-color-primary) 45%, transparent);
 }
 .name-text.is-unset {
@@ -716,7 +744,7 @@ onMounted(loadAll)
 .hs-num {
   font-size: 24px;
   font-weight: 700;
-  color: var(--el-color-primary);
+  color: var(--wb-accent-text);
   line-height: 1.1;
   font-variant-numeric: tabular-nums;
 }
@@ -814,7 +842,7 @@ onMounted(loadAll)
   background: var(--el-bg-color);
 }
 .cls-item.now {
-  border-color: #b3d8ff;
+  border-color: var(--el-color-primary-light-7);
   background: var(--el-color-primary-light-9);
 }
 .cls-item.done {
@@ -880,6 +908,8 @@ onMounted(loadAll)
   gap: 10px;
 }
 .en-label {
+  /* ⚠️ 这一处**保持主色**：下面垫了 --el-color-primary-light-9（浅色强调底），
+     主色压在上面 4.66 ≥ 4.5 达标；改用更暗的 --wb-accent-text 反而会降到 4.49 差一点点 */
   font-size: 12px;
   color: var(--el-color-primary);
   background: var(--el-color-primary-light-9);
@@ -928,7 +958,7 @@ onMounted(loadAll)
 .cd-num {
   font-size: 20px;
   font-weight: 700;
-  color: var(--el-color-primary);
+  color: var(--wb-accent-text);
   font-variant-numeric: tabular-nums;
 }
 .cd-num.today {
@@ -1082,6 +1112,10 @@ onMounted(loadAll)
   box-shadow: 0 2px 10px color-mix(in srgb, var(--el-color-primary) 16%, transparent);
   transform: translateY(-1px);
 }
+/* 快捷入口图标的颜色不在**这里**给：模板行内给 `--sc-from` / `--sc-to`（每个入口一支调好的渐变），
+   AppIcon 只是"有上下文就用上下文、没有就等回强调色"（见 components/AppIcon.vue 的契约注释）。
+   主题若要换掉这套图标语言，用 `html[data-wb-theme=…] .sc-item .app-icon` 覆盖 --ai-* 即可
+   （claude / paper 两套就是这么把色块整体去掉的）。 */
 .sc-body {
   min-width: 0;
 }
