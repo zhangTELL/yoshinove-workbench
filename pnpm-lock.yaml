@@ -17,6 +17,9 @@ importers:
       '@element-plus/icons-vue':
         specifier: ^2.3.1
         version: 2.3.2(vue@3.5.42(typescript@5.7.3))
+      '@lucide/vue':
+        specifier: ^1.47.0
+        version: 1.47.0(vue@3.5.42(typescript@5.7.3))
       '@wb/shared':
         specifier: workspace:*
         version: link:../shared
@@ -475,6 +478,11 @@ packages:
 
   '@jridgewell/sourcemap-codec@1.6.0':
     resolution: {integrity: sha512-T7jf+5zgsZHwNJ4lvQ7/aezbyk0nNX+zJVWpmHA7VYsEx7a7qr5Rg5IbtJFqkgze5Y2sruq1RUY8Q837Od7iFw==}
+
+  '@lucide/vue@1.47.0':
+    resolution: {integrity: sha512-S0/UX9zra4Z8xmqrA1MH5GiSKA8daAPFwkmORt/u+gUHAkYZoeOcr+DH3scZeyE9bdLWScGK+MJoDYi8rIU5Jg==}
+    peerDependencies:
+      vue: '>=3.0.1'
 
   '@napi-rs/canvas-android-arm64@0.1.100':
     resolution: {integrity: sha512-hjhCKhntPv9+t4ckHymdx0phYNcVW+GKQR6Lzw2zE+pOVjOplSmtx9nNNknTjbEDLcuLZqA1y8ufKg1XfgftzQ==}
@@ -1791,6 +1799,10 @@ snapshots:
   '@floating-ui/utils@0.2.12': {}
 
   '@jridgewell/sourcemap-codec@1.6.0': {}
+
+  '@lucide/vue@1.47.0(vue@3.5.42(typescript@5.7.3))':
+    dependencies:
+      vue: 3.5.42(typescript@5.7.3)
 
   '@napi-rs/canvas-android-arm64@0.1.100':
     optional: true

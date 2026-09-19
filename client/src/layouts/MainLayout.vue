@@ -1,32 +1,13 @@
 <script setup lang="ts">
-import {
-  AlarmClock,
-  FolderOpened,
-  Bell,
-  Calendar,
-  Collection,
-  DataAnalysis,
-  Football,
-  Grid,
-  Histogram,
-  House,
-  MagicStick,
-  Notebook,
-  Reading,
-  Setting,
-  Timer,
-  TrendCharts,
-  View,
-  Wallet,
-} from '@element-plus/icons-vue'
 import type { MenuInstance } from 'element-plus'
 import { ElNotification } from 'element-plus'
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
-import type { Component } from 'vue'
 import { useRoute } from 'vue-router'
 import { get, post } from '../api/http'
 import AppIcon from '../components/AppIcon.vue'
 import { t } from '../locales'
+import type { IconKey } from '../utils/themeIcons'
+import { themedIcon } from '../utils/themeIcons'
 
 const route = useRoute()
 
@@ -35,14 +16,15 @@ interface SubItem {
   title: string
   /** 文案字典键（title 保留中文原文作为回退） */
   tKey: string
-  icon: Component
+  /** 逻辑图标名；具体用哪个图标由当前主题决定（见 utils/themeIcons.ts） */
+  icon: IconKey
 }
 interface NavLink {
   kind: 'link'
   path: string
   title: string
   tKey: string
-  icon: Component
+  icon: IconKey
 }
 interface NavGroup {
   kind: 'group'
@@ -52,7 +34,7 @@ interface NavGroup {
   path: string
   title: string
   tKey: string
-  icon: Component
+  icon: IconKey
   items: SubItem[]
 }
 
@@ -60,35 +42,35 @@ interface NavGroup {
  * 左侧主导航：**有序数组决定显示顺序**。
  * 之前是「分组前 / 分组 / 分组后」三段式，加一个位于中间的分组就得改结构，所以改成联合数组。
  * 加页面/分组只动这里（分组还要在对应 View 里加 TABS 常量）。
+ * `icon` 写的是**逻辑图标名**，具体图标按主题解析（见 utils/themeIcons.ts）。
  */
 const nav: (NavLink | NavGroup)[] = [
-  // 首页原先用的是 Menu（汉堡）——语义上像"打开菜单"，和"首页"不对应，换成轮廓房子
-  { kind: 'link', path: '/dashboard', title: '首页', tKey: 'nav.dashboard', icon: House },
+  { kind: 'link', path: '/dashboard', title: '首页', tKey: 'nav.dashboard', icon: 'dashboard' },
   {
     kind: 'group',
     index: 'schedule',
     path: '/schedule',
     title: '课表', tKey: 'nav.schedule',
-    icon: Calendar,
+    icon: 'schedule',
     items: [
-      { key: 'grid', title: '课程表', tKey: 'nav.scheduleGrid', icon: Calendar },
-      { key: 'remind', title: '上课提醒', tKey: 'nav.scheduleRemind', icon: Bell },
+      { key: 'grid', title: '课程表', tKey: 'nav.scheduleGrid', icon: 'scheduleGrid' },
+      { key: 'remind', title: '上课提醒', tKey: 'nav.scheduleRemind', icon: 'scheduleRemind' },
     ],
   },
-  { kind: 'link', path: '/chaoxing', title: '学习通作业', tKey: 'nav.chaoxing', icon: Reading },
-  { kind: 'link', path: '/notes', title: '笔记', tKey: 'nav.notes', icon: Notebook },
-  { kind: 'link', path: '/projects', title: '项目管理', tKey: 'nav.projects', icon: FolderOpened },
+  { kind: 'link', path: '/chaoxing', title: '学习通作业', tKey: 'nav.chaoxing', icon: 'chaoxing' },
+  { kind: 'link', path: '/notes', title: '笔记', tKey: 'nav.notes', icon: 'notes' },
+  { kind: 'link', path: '/projects', title: '项目管理', tKey: 'nav.projects', icon: 'projects' },
   {
     kind: 'group',
     index: 'ai',
     path: '/ai-lab',
     title: 'AI 实验区', tKey: 'nav.ai-lab',
-    icon: MagicStick,
+    icon: 'aiLab',
     items: [
-      { key: 'balance', title: '账户余额', tKey: 'nav.balance', icon: Wallet },
-      { key: 'prompts', title: 'Prompt 库', tKey: 'nav.prompts', icon: Collection },
-      { key: 'compare', title: '模型对比', tKey: 'nav.compare', icon: DataAnalysis },
-      { key: 'sandbox', title: '沙箱渲染', tKey: 'nav.sandbox', icon: View },
+      { key: 'balance', title: '账户余额', tKey: 'nav.balance', icon: 'balance' },
+      { key: 'prompts', title: 'Prompt 库', tKey: 'nav.prompts', icon: 'prompts' },
+      { key: 'compare', title: '模型对比', tKey: 'nav.compare', icon: 'compare' },
+      { key: 'sandbox', title: '沙箱渲染', tKey: 'nav.sandbox', icon: 'sandbox' },
     ],
   },
   {
@@ -96,15 +78,15 @@ const nav: (NavLink | NavGroup)[] = [
     index: 'tools',
     path: '/tools',
     title: '日常工具', tKey: 'nav.tools',
-    icon: Histogram,
+    icon: 'tools',
     items: [
-      { key: 'runs', title: '健康跑', tKey: 'nav.runs', icon: Football },
-      { key: 'countdown', title: '倒计日', tKey: 'nav.countdown', icon: AlarmClock },
-      { key: 'scores', title: '成绩绩点', tKey: 'nav.scores', icon: TrendCharts },
-      { key: 'pomodoro', title: '番茄钟', tKey: 'nav.pomodoro', icon: Timer },
+      { key: 'runs', title: '健康跑', tKey: 'nav.runs', icon: 'runs' },
+      { key: 'countdown', title: '倒计日', tKey: 'nav.countdown', icon: 'countdown' },
+      { key: 'scores', title: '成绩绩点', tKey: 'nav.scores', icon: 'scores' },
+      { key: 'pomodoro', title: '番茄钟', tKey: 'nav.pomodoro', icon: 'pomodoro' },
     ],
   },
-  { kind: 'link', path: '/settings', title: '设置', tKey: 'nav.settings', icon: Setting },
+  { kind: 'link', path: '/settings', title: '设置', tKey: 'nav.settings', icon: 'settings' },
 ]
 
 const groups = computed(() => nav.filter((n): n is NavGroup => n.kind === 'group'))
@@ -167,7 +149,7 @@ onUnmounted(() => {
   <el-container class="layout">
     <el-aside width="200px" class="aside">
       <div class="logo">
-        <AppIcon :icon="Grid" :size="26" />
+        <AppIcon :icon="themedIcon('logo')" :size="26" />
         <span class="logo-text">工作台</span>
       </div>
       <el-menu
@@ -180,17 +162,17 @@ onUnmounted(() => {
         <template v-for="n in nav" :key="n.kind === 'group' ? n.index : n.path">
           <el-sub-menu v-if="n.kind === 'group'" :index="n.index">
             <template #title>
-              <el-icon><component :is="n.icon" /></el-icon>
+              <el-icon><component :is="themedIcon(n.icon)" /></el-icon>
               <span>{{ t(n.tKey) }}</span>
             </template>
             <el-menu-item v-for="it in n.items" :key="it.key" :index="`${n.path}?tab=${it.key}`">
-              <el-icon><component :is="it.icon" /></el-icon>
+              <el-icon><component :is="themedIcon(it.icon)" /></el-icon>
               <span>{{ t(it.tKey) }}</span>
             </el-menu-item>
           </el-sub-menu>
 
           <el-menu-item v-else :index="n.path">
-            <el-icon><component :is="n.icon" /></el-icon>
+            <el-icon><component :is="themedIcon(n.icon)" /></el-icon>
             <span>{{ t(n.tKey) }}</span>
           </el-menu-item>
         </template>

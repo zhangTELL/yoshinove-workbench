@@ -19,6 +19,8 @@ client/public/vditor/
 __pycache__/
 tools/icon/tmp/
 .DS_Store
+# pnpm 在"store 与项目不同盘"时的硬链接兜底会留下这种 0 字节临时文件（每次 pnpm add 可能出现）
+_tmp_*
 
 # ===== 项目管理 / 开发文档 / 交接文档：仅本地保留，不上传 =====
 交接文档.md

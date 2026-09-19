@@ -51,6 +51,24 @@
   --el-border-radius-small: var(--wb-radius-small);
 }
 
+/* ===== 表单控件的字体重置（★ 2026-09-19 实测发现的隐藏问题）=====
+   Chromium 的 **UA 样式表**给表单控件写的是 `font: 400 13.3333px Arial`，
+   而 Element Plus **没有**在 `.el-button` / `.el-input__inner` 这类控件上声明 `font-family`。
+   于是这些控件的字体一直是 **Arial**，跟页面的 `--wb-font-ui` 根本不是一套
+   （实测：body 是 `"Segoe UI", "Microsoft YaHei"`，而 `.el-button` 是 `Arial`）——**默认主题也一样**。
+
+   影响范围：按钮、输入框、下拉、文本域、以及所有基于原生控件的 EP 组件。
+   所以"改了字体却只改了正文、按钮没变"就是这里漏的。
+
+   修法：用**元素选择器**兜底。UA 样式的优先级低于任何作者样式，元素选择器足够赢，
+   而且不必去碰 EP 各组件的具体样式。 */
+button,
+input,
+select,
+textarea {
+  font-family: var(--wb-font-ui);
+}
+
 /* ===== 组件级圆角补丁 =====
    EP 有一批组件把圆角变量**就地声明在自己身上**，值还是字面量：
      .el-card{--el-card-border-radius:4px}   .el-popover{--el-popover-border-radius:4px}

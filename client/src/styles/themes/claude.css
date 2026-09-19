@@ -1,0 +1,211 @@
+/* ===== 主题预设：Claude（暖纸墨橘）=====
+   浅色专用（四套预置主题都不做深色，深色只属于 default 主题）。
+
+   设计意图：温暖、克制、阅读优先。米白纸底 + 赭橘强调 + 低饱和暖灰边框，
+   **没有玻璃、没有渐变、阴影极轻**——Claude 的界面几乎只有 1px 边框和留白。
+
+   数值依据（见 主题预设-设计方案.md §2.2 / §4.2）：
+     - 底色/文字/边框：Teteerck/obsidian-claude-theme（MIT）实测 token
+     - 强调色：改用 **Claude 界面自己的赭橘 `#D97757`**。
+       方案文档里记的是 `#CC6B3C`，那个值来自上面那个第三方 Obsidian 主题（是它对 Claude 的
+       一种解读）；做「Claude 风格」直接用它界面里的原色更贴。两者都是暖橘，差异很小。
+     - 图标：Claude 的界面图标是**细线、单色、暖灰**，所以本主题把 macOS 那套
+       「彩色渐变圆角方形」整体换成扁平淡色 + 细线字形（见下方「图标语言」段）。
+
+   本文件只声明值 + 表面规则，不碰 --el-* 的颜色映射（映射统一在 bridge.css）。 */
+
+html[data-wb-theme='claude'] {
+  /* ---- 字体 ----
+     ★ 重要前提：**Anthropic 的字体是商业授权字体，不能打包进仓库**。
+       它家用的 Styrene A（无衬线/UI）、Galaxie Copernicus 与 Tiempos Text（衬线/标题），
+       以及 claude.ai 上那套自称 anthropic-sans / anthropic-serif 的字体，都不是开源的——
+       `anthropics` 组织下没有任何字体仓库；GitHub 上那些"打包下载"的仓库描述里
+       自己就写着 personal use only, not my IP。所以这里**不附带任何字体文件**。
+
+     做法（这也是合规的标准做法）：**把真正的字体名放在栈的最前面**——
+       ① 将来你若合法取得并安装这些字体，主题会自动用上，一行都不用改；
+       ② 现在没有，就按顺序回落到最接近的开源等替。
+
+     等替的选择（本机已装，OFL 许可，family 名从注册表确认过）：
+       · UI/正文 → 'Noto Sans SC'（思源黑体）。它的**拉丁部分就是 Source Sans**，
+         所以中西文同源、风格统一；默认主题用的是 Segoe UI + 微软雅黑，换过来差异是看得见的。
+       · 标题/标字 → 'Noto Serif SC'（思源宋体），拉丁部分是 Source Serif。
+         用衬线是 Claude 品牌最有辨识度的一点（它家 display 字体就是经典衬线）。
+
+     ⚠️ 顺序有讲究：字体栈是**逐字符**回落的，'Noto Sans SC' 必须排在 'Segoe UI' 之前，
+        否则拉丁字母会先被 Segoe UI 截走，只剩中文走思源——中西文就不同源了。 */
+  --wb-font-ui: 'Styrene B', 'Anthropic Sans', 'Inter', 'Noto Sans SC', 'Source Han Sans SC',
+    'Microsoft YaHei', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --wb-font-display: 'Copernicus', 'Anthropic Serif', 'Tiempos Text', 'Source Serif 4',
+    'Noto Serif SC', 'Source Han Serif SC', 'STZhongsong', Georgia, serif;
+  --wb-font-mono: 'JetBrains Mono', ui-monospace, 'Cascadia Mono', Consolas, 'Courier New', monospace;
+
+  /* ---- 页面底：纸白，没有壁纸 ---- */
+  --wb-bg: #faf9f5;
+  --wb-bg-image: none;
+
+  /* ---- 表面 ---- */
+  --wb-surface: #ffffff;
+  --wb-surface-overlay: #ffffff;
+
+  /* ---- 填充档：暖灰，而不是默认的冷灰 ---- */
+  --wb-fill: #f4f3ee;
+  --wb-fill-light: #f7f6f1;
+  --wb-fill-lighter: #faf9f5;
+  --wb-fill-extra-light: #fcfbf8;
+  --wb-fill-dark: #eeece6;
+  --wb-fill-darker: #e7e4dc;
+  --wb-fill-blank: #ffffff;
+
+  /* ---- 文字：带一点暖调的墨色 ---- */
+  --wb-text: #2c2b28;
+  --wb-text-regular: #46443f;
+  --wb-text-muted: #6e6a63;
+  --wb-text-faint: #9a958c;
+  --wb-text-disabled: #b8b3a9;
+
+  /* ---- 边框：低饱和暖灰，替代默认的冷灰 ---- */
+  --wb-border-darker: #d6d2c7;
+  --wb-border-dark: #dedad0;
+  --wb-border: #e4e0d7;
+  --wb-border-light: #eae7df;
+  --wb-border-lighter: #efece5;
+  --wb-border-faint: #f4f2ec;
+
+  /* ---- 阴影：极轻。Claude 的层次几乎全靠边框，不靠投影 ---- */
+  --wb-shadow: 0 1px 2px rgba(44, 43, 40, 0.06), 0 8px 24px rgba(44, 43, 40, 0.05);
+  --wb-shadow-light: 0 1px 3px rgba(44, 43, 40, 0.07);
+  --wb-shadow-lighter: 0 1px 2px rgba(44, 43, 40, 0.05);
+  --wb-shadow-dark: 0 12px 32px rgba(44, 43, 40, 0.14);
+
+  /* ---- 质感：全关（没有玻璃、没有纹理）---- */
+  --wb-glass-bg: var(--wb-surface);
+  --wb-glass-border: var(--wb-border-light);
+  --wb-glass-blur: 0px;
+  --wb-glass-saturate: 100%;
+  --wb-texture: none;
+
+  /* ---- 首页问候条：赭橘的极淡暖染 ---- */
+  --wb-hero-from: #fbf2ed;
+  --wb-hero-to: #fdfaf6;
+  --wb-hero-border: #f0e0d5;
+}
+
+/* ==================== 图标语言（与 macOS 主题刻意拉开）====================
+   macOS 那套是「彩色渐变 + 圆角方形 + 白色字形」；Claude 的是「细线 + 单色 + 暖灰/赭橘」。
+   同一套组件两种处理，靠的就是下面这几条覆盖（AppIcon.vue 内部是 scoped 样式，
+   选择器带 html[data-wb-theme] 后特异性更高，能稳定压过它）。 */
+
+/* ① logo：去掉色块，直接让官方星芒以赭橘色裸着站——Claude 侧栏本来就是一个字标 + 一个标 */
+html[data-wb-theme='claude'] .logo .app-icon {
+  background: none;
+  box-shadow: none;
+  color: var(--el-color-primary);
+  border-radius: 0;
+}
+html[data-wb-theme='claude'] .logo .app-icon::before {
+  display: none; /* 去掉 macOS 那层镜面高光 */
+}
+html[data-wb-theme='claude'] .logo .app-icon .app-icon__glyph {
+  /* 没有色块兜底，字形要占满整个盒子，否则 26px 的框里只有 14px 的线 */
+  font-size: calc(var(--ai-size) * 0.88);
+}
+
+/* ② 快捷入口：扁平淡暖底 + 细线字形 + 小圆角（不再用渐变 squircle）。
+   用容器限定（而不是 :not(.logo *) 这类复杂选择器）——同主题下两个位置的处理本来就不同，
+   选择器说清楚"哪个位置"最不容易出错。 */
+html[data-wb-theme='claude'] .sc-item .app-icon {
+  /* 配色不再逐个入口不同：Claude 的界面是单色图标语言 */
+  background: color-mix(in srgb, var(--el-color-primary) 8%, var(--wb-surface));
+  color: var(--el-color-primary);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--el-color-primary) 22%, transparent);
+  border-radius: 8px;
+}
+html[data-wb-theme='claude'] .sc-item .app-icon::before {
+  display: none;
+}
+/* 淡底 + 细线比"实底 + 白字形"看起来更小，所以字形略微放大找补光学重量 */
+html[data-wb-theme='claude'] .sc-item .app-icon .app-icon__glyph {
+  font-size: calc(var(--ai-size) * 0.62);
+}
+
+/* ③ logo 字标：Claude 的字标是衬线体，中文这里用宋体类顶上（只影响这一个词） */
+html[data-wb-theme='claude'] .logo-text {
+  /* 用契约里的 display 栈（Copernicus → … → 思源宋体），别在这儿另写一套字体名 */
+  font-family: var(--wb-font-display);
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+/* ④ 侧栏未选中图标：暖灰（默认的 secondaryLabel 偏冷） */
+html[data-wb-theme='claude'] .menu .el-menu-item:not(.is-active) > .el-icon,
+html[data-wb-theme='claude'] .menu .el-sub-menu__title > .el-icon {
+  color: var(--wb-text-faint);
+}
+
+/* ==================== 字体：衬线只用在「标题类」上 ====================
+   Claude 的品牌观感里衬线占了很大分量（它家的问候语、标题都是衬线），
+   所以把 --wb-font-display 落到界面里真正"像标题"的两处：问候语 + 卡片头标题
+   （侧栏标字在下面「图标语言」段里）。
+
+   ⚠️ 刻意**不**铺到正文：思源宋体在 13~14px 的界面正文上会发虚，而且 Claude 自己的界面
+   正文也是无衬线。正文靠 --wb-font-ui（思源黑体 / Source Sans）就够。 */
+html[data-wb-theme='claude'] .hero-greet {
+  font-family: var(--wb-font-display);
+  font-weight: 600;
+  letter-spacing: 0.01em;
+}
+html[data-wb-theme='claude'] .el-card__header {
+  font-family: var(--wb-font-display);
+  font-weight: 600;
+}
+/* 卡片头里常带操作控件（"查看课表"按钮、筛选单选、标签），它们是操作不是标题，留在无衬线上。
+   用 :where() 把特异性压到 0，只保留外层两段——对"继承来的字体"来说，
+   任何命中规则的优先级都够，不必把特异性堆高。 */
+html[data-wb-theme='claude'] .el-card__header :where(
+  .el-button,
+  .el-tag,
+  .el-radio-button__inner,
+  .el-checkbox__label,
+  .el-input__wrapper,
+  .el-input__inner,
+  .el-select__placeholder,
+  .el-switch,
+  .el-link
+) {
+  font-family: var(--wb-font-ui);
+}
+
+/* ==================== 表面规则 ==================== */
+
+/* 卡片：只用 1px 暖边框，不加投影（Claude 的卡片是"纸片"，不是"浮起的板"） */
+html[data-wb-theme='claude'] .el-card {
+  box-shadow: none;
+}
+/* 卡片头：不要 macOS 那种半透明材质，直接和卡身同色 + 一条暖分隔线
+   （字体部分见上面「字体」段，别在这儿重复写 font-weight） */
+html[data-wb-theme='claude'] .el-card__header {
+  background: transparent;
+  border-bottom: 1px solid var(--wb-border-lighter);
+}
+
+/* 表格：表头暖灰、分隔线更淡 */
+html[data-wb-theme='claude'] .el-table th.el-table__cell {
+  background: var(--wb-fill-light);
+}
+html[data-wb-theme='claude'] .el-table td.el-table__cell,
+html[data-wb-theme='claude'] .el-table th.el-table__cell {
+  border-bottom-color: var(--wb-border-lighter);
+}
+
+/* 输入框：Claude 的输入框是浅暖底 + 无强边框 */
+html[data-wb-theme='claude'] .el-input__wrapper,
+html[data-wb-theme='claude'] .el-textarea__inner {
+  background: var(--wb-fill-light);
+  box-shadow: 0 0 0 1px var(--wb-border-light) inset;
+}
+html[data-wb-theme='claude'] .el-input__wrapper.is-focus,
+html[data-wb-theme='claude'] .el-textarea__inner:focus {
+  box-shadow: 0 0 0 1px var(--el-color-primary) inset;
+  background: var(--wb-surface);
+}

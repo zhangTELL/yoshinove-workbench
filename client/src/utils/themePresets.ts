@@ -44,11 +44,11 @@ export const THEME_PRESETS: ThemePreset[] = [
   {
     id: 'claude',
     name: 'Claude',
-    desc: '暖纸墨橘，阅读优先',
-    ready: false,
-    accent: '#cc6b3c',
+    desc: '暖纸墨橘，细线图标，阅读优先',
+    ready: true,
+    accent: '#d97757',
     radius: 6,
-    colors: ['#cc6b3c', '#fafaf8', '#2c2b29'],
+    colors: ['#d97757', '#faf9f5', '#2c2b28'],
   },
   {
     id: 'paper',

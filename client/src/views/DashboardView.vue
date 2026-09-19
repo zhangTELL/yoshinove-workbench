@@ -5,20 +5,12 @@ import { computed, nextTick, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import type { InputInstance } from 'element-plus'
 import { ElMessage } from 'element-plus'
-import {
-  Calendar,
-  Check,
-  Edit,
-  Histogram,
-  MagicStick,
-  Notebook,
-  Reading,
-  Refresh,
-  Setting,
-} from '@element-plus/icons-vue'
+import { Check, Edit, Refresh } from '@element-plus/icons-vue'
 import { get, post } from '../api/http'
 import AppIcon from '../components/AppIcon.vue'
 import { DEFAULT_NAME, displayName, NAME_MAX, saveDisplayName } from '../stores/profile'
+import type { IconKey } from '../utils/themeIcons'
+import { themedIcon } from '../utils/themeIcons'
 
 /**
  * 首页 Dashboard：纯前端组装，数据全部来自既有接口，不新增后端路由。
@@ -341,14 +333,27 @@ async function loadRuns() {
  * 快捷入口：图标用 macOS 风格的圆角方形（见 components/AppIcon.vue）。
  * 配色取 macOS 系统色（每个入口一个色相，像 Launchpad 里一排各不相同的 App 图标），
  * 而不是清一色的强调色——那才是 Mac 的观感。渐变是"上浅下深"，白色字形压在中间色上。
+ *
+ * `icon` 是**逻辑图标名**（不是组件），具体用哪套图标由当前主题决定：
+ * Claude 主题会换成一套细线图标 + 无渐变的暖色处理，见 utils/themeIcons.ts 与 themes/claude.css。
  */
-const shortcuts = [
-  { path: '/schedule', title: '课表', hint: '周视图 / 提醒', icon: Calendar, from: '#4B9BFF', to: '#0A5FC8' },
-  { path: '/chaoxing', title: '学习通作业', hint: '同步 / 待办', icon: Reading, from: '#FFA23F', to: '#D26400' },
-  { path: '/notes', title: '笔记', hint: 'Markdown', icon: Notebook, from: '#FFC43D', to: '#C97C00' },
-  { path: '/ai-lab?tab=balance', title: 'AI 实验区', hint: '余额 / 对比', icon: MagicStick, from: '#C077F5', to: '#7A2BBE' },
-  { path: '/tools?tab=runs', title: '日常工具', hint: '打卡 / 绩点', icon: Histogram, from: '#3FC9BE', to: '#0B857C' },
-  { path: '/settings', title: '设置', hint: '外观 / 主题', icon: Setting, from: '#A5A5AD', to: '#66666E' },
+interface Shortcut {
+  path: string
+  title: string
+  hint: string
+  icon: IconKey
+  /** 图标渐变的上浅/下深两色 */
+  from: string
+  to: string
+}
+
+const shortcuts: Shortcut[] = [
+  { path: '/schedule', title: '课表', hint: '周视图 / 提醒', icon: 'scheduleGrid', from: '#4B9BFF', to: '#0A5FC8' },
+  { path: '/chaoxing', title: '学习通作业', hint: '同步 / 待办', icon: 'chaoxing', from: '#FFA23F', to: '#D26400' },
+  { path: '/notes', title: '笔记', hint: 'Markdown', icon: 'notes', from: '#FFC43D', to: '#C97C00' },
+  { path: '/ai-lab?tab=balance', title: 'AI 实验区', hint: '余额 / 对比', icon: 'aiLab', from: '#C077F5', to: '#7A2BBE' },
+  { path: '/tools?tab=runs', title: '日常工具', hint: '打卡 / 绩点', icon: 'tools', from: '#3FC9BE', to: '#0B857C' },
+  { path: '/settings', title: '设置', hint: '外观 / 主题', icon: 'settings', from: '#A5A5AD', to: '#66666E' },
 ]
 
 const go = (path: string) => void router.push(path)
@@ -620,7 +625,7 @@ onMounted(loadAll)
       <template #header>快捷入口</template>
       <div class="sc-grid">
         <button v-for="s in shortcuts" :key="s.path" class="sc-item" @click="go(s.path)">
-          <AppIcon :icon="s.icon" :size="30" :from="s.from" :to="s.to" />
+          <AppIcon :icon="themedIcon(s.icon)" :size="30" :from="s.from" :to="s.to" />
           <div class="sc-body">
             <div class="sc-title">{{ s.title }}</div>
             <div class="sc-hint">{{ s.hint }}</div>
