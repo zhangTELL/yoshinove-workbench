@@ -1151,7 +1151,7 @@ async function removeSession() {
   inset: 0;
   background-size: cover;
   background-position: center;
-  border-radius: 10px;
+  border-radius: var(--wb-radius-card);
 }
 .grid-head,
 .grid-body {
@@ -1165,7 +1165,7 @@ async function removeSession() {
 }
 .head-cell {
   background: rgba(255, 255, 255, var(--cell-alpha, 0.85));
-  border-radius: 6px;
+  border-radius: var(--wb-radius-base);
   padding: 8px 0;
   text-align: center;
   font-weight: 600;
@@ -1188,7 +1188,7 @@ async function removeSession() {
 .section-cell,
 .slot-cell {
   background: rgba(255, 255, 255, var(--cell-alpha, 0.85));
-  border-radius: 4px;
+  border-radius: var(--wb-radius-small);
   min-height: 62px;
 }
 .section-cell {
@@ -1211,7 +1211,7 @@ async function removeSession() {
   left: 2px;
   right: 2px;
   border: 1.5px solid;
-  border-radius: 8px;
+  border-radius: var(--wb-radius-card);
   padding: 6px 8px;
   cursor: pointer;
   overflow: hidden;

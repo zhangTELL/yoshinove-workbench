@@ -53,8 +53,8 @@ export const THEME_PRESETS: ThemePreset[] = [
   {
     id: 'paper',
     name: '纸页',
-    desc: '纸质手账 / 学术排版',
-    ready: false,
+    desc: '纸白 + 衬线正文 + 横格纹 + 印章红，零圆角',
+    ready: true,
     accent: '#b7282e',
     radius: 0,
     colors: ['#b7282e', '#fffff8', '#151515'],

@@ -192,7 +192,7 @@ const channelName: Record<string, string> = {
   font-size: 12px;
   line-height: 1.8;
   background: #f4f4f5;
-  border-radius: 6px;
+  border-radius: var(--wb-radius-base);
   padding: 10px 14px;
 }
 .form-tip {

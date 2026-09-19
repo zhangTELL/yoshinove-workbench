@@ -1,0 +1,345 @@
+/* ===== 主题预设：paper（纸质笔记本 / 学术手账）=====
+   浅色专用（纸质本来就没有深色形态）。
+
+   设计意图：**一页纸**。纸白底 + 纯 CSS 画的横格纹 + 衬线正文 + 细线分割 + 印章红点缀 + **零圆角**。
+   视觉依据（均 MIT，见 主题预设-设计方案.md §2.3）：
+     - 纸白 `#fffff8` 与排版节奏：edwardtufte/tufte-css（6561★）
+       —— 注意它自带的 `et-book` 字体**有独立授权**，本项目不打包任何字体，用系统衬线实现等价观感。
+     - 学术排版细节（字号阶梯、行距、booktabs 式表格线）：vincentdoerig/latex-css（3480★）
+
+   本文件只声明值 + 表面规则，不碰 --el-* 的颜色映射（映射统一在 bridge.css）。 */
+
+html[data-wb-theme='paper'] {
+  /* ---- 页面底：Tufte 的纸白（比纯白暖）---- */
+  --wb-bg: #fffff8;
+  --wb-bg-image: none;
+
+  /* ---- 表面：卡片 = 压在纸上的另一张纸（比底略深一档）---- */
+  --wb-surface: #fbfaf3;
+  --wb-surface-overlay: #fffff8;
+
+  /* ---- 填充档：暖米灰 ---- */
+  --wb-fill: #f2f0e6;
+  --wb-fill-light: #f7f6ee;
+  --wb-fill-lighter: #fbfaf3;
+  --wb-fill-extra-light: #fdfcf7;
+  --wb-fill-dark: #eae7db;
+  --wb-fill-darker: #e2ded0;
+  --wb-fill-blank: #fffff8;
+
+  /* ---- 文字：墨黑 + 铅笔灰 ---- */
+  --wb-text: #151515;
+  --wb-text-regular: #33312b;
+  --wb-text-muted: #5a564b;
+  --wb-text-faint: #8a8578;
+  --wb-text-disabled: #b3ae9f;
+
+  /* ---- 边框：铅笔线 ---- */
+  --wb-border-darker: #b9b3a1;
+  --wb-border-dark: #c8c2b2;
+  --wb-border: #d9d5c7;
+  --wb-border-light: #e3dfd3;
+  --wb-border-lighter: #ebe8dd;
+  --wb-border-faint: #f2f0e7;
+
+  /* ---- 阴影：纸片不"浮起"，只留一道极浅的落影 ---- */
+  --wb-shadow: 0 1px 0 rgba(21, 21, 21, 0.06);
+  --wb-shadow-light: 0 1px 0 rgba(21, 21, 21, 0.04);
+  --wb-shadow-lighter: 0 1px 0 rgba(21, 21, 21, 0.04);
+  --wb-shadow-dark: 0 8px 24px rgba(21, 21, 21, 0.12);
+
+  /* ---- 字体：正文衬线 + 标题/导航手写（两个角色分开）----
+     ★ **正文用衬线**：方案 §4.3 的"意图"里写的是"衬线正文"，但它那份 token 清单里
+       `--wb-font-ui` 写的是无衬线，两句自相矛盾。这里按"意图"走——Tufte 的正文本来就是衬线
+       （ET Book），不铺衬线这个主题就只剩"米白底 + 红点缀"，读不出"纸"。
+       真名放栈首（tufte-css 自带 ET Book，但**字体授权独立、本项目不打包任何字体**），
+       回落 Source Serif 4 → **思源宋体**（本机已装、OFL，中西文同源）。
+       ⚠️ 衬线在小字号下偏"虚"，所以下面「表面规则」里给最小号的几类文字加了半档字重找补。
+
+     ★ **标题与侧栏导航用手写体**（`--wb-font-display`，2026-09-19 用户要求）。
+       规则在下方「手写体」段，**正文刻意不换**——手写体在 13~14px 的成段正文里明显难读。
+       手写栈同样不打包字体，全部回落本机已装的：
+         · 真名放首位 `LXGW WenKai`（霞鹜文楷，OFL、基于 Fontworks 的 Klee One）：
+           系统不自带，但哪天装了它这里会自动用上，观感比系统楷体更"手账"。
+         · 拉丁 Segoe Print → Ink Free → Segoe Script（Windows 自带三款手写体，按清晰度排序）。
+         · 中文 STKaiti（华文楷体）→ KaiTi（楷体，Windows 全平台自带、最稳）→ 方正舒体。
+           刻意**不拿隶书/舒体打头**：13px 导航上太花，隶书连笔画结构都变形。
+         · 末尾 `cursive` 兜底（浏览器的通用手写族）。 */
+  --wb-font-ui: 'ET Book', 'et-book', 'Source Serif 4', 'Noto Serif SC', 'Source Han Serif SC',
+    'STZhongsong', Georgia, 'Songti SC', serif;
+  --wb-font-display: 'LXGW WenKai', '霞鹜文楷', 'Segoe Print', 'Ink Free', 'Segoe Script',
+    'STKaiti', 'KaiTi', '楷体', 'FZShuTi', '方正舒体', cursive, serif;
+
+  /* ---- 质感：纯 CSS 渐变画出"横格纸"----
+     不引位图：既省一次请求，也能避免点阵/细线在 125% DPI 下出现摩尔纹。
+     节奏 28px：27px 空白 + 1px 铅笔线；`--wb-texture-size` 显式给 100% 28px，
+     让每一格正好 28px，线条落在格底，缩放时不会错位。 */
+  --wb-texture: repeating-linear-gradient(
+    to bottom,
+    transparent 0 27px,
+    rgba(90, 86, 75, 0.1) 27px 28px
+  );
+  --wb-texture-size: 100% 28px;
+
+  /* ---- 胶囊档：纸面上没有胶囊（拼合按钮等一律方角）---- */
+  --wb-radius-pill: 0px;
+
+  /* ---- 纸感细节用的"纸张厚度"配方（下面是"贴在纸上的纸片"共用的一套阴影）----
+     思路：先用两条 1px 实色线画出**纸的边缘**（第二层比第一层更淡，形成厚度感），
+     再补一道很短、很收的落影。比单纯一道柔和阴影更像"纸"，因为纸是有厚度的实体、
+     贴上去会沿着边缘投出一条硬边。 */
+  --paper-lift:
+    0 1px 0 var(--wb-border-light),
+    0 2px 0 var(--wb-border-lighter),
+    0 4px 8px -4px rgba(21, 21, 21, 0.16);
+
+  /* 和纸胶带（washi tape）的配色：半透明暖黄，两端略深一点像撕口 */
+  --paper-tape: linear-gradient(
+    180deg,
+    rgba(240, 229, 196, 0.78),
+    rgba(228, 213, 172, 0.72)
+  );
+
+  /* ---- 首页问候条：一张便签，不要渐变光晕 ---- */
+  --wb-hero-from: #fffff8;
+  --wb-hero-to: #fbfaf3;
+  --wb-hero-border: #d9d5c7;
+}
+
+/* ==================== 手写体：只落在「标题 + 导航栏」====================
+   用户 2026-09-19 的要求：标题和导航栏换手写体，**正文不换**（避免看不清）。
+   所以这里逐个点名，**不做全局覆盖**——手写体在 13~14px 的成段正文（列表项、表格、说明）
+   上会明显难读，宁可多写几行选择器。
+
+   ⚠️ **必须显式写 font-weight: 400**：楷体（KaiTi/simkai）与华文楷体**只有 Regular 一个字重**，
+   写 500/600 会让浏览器做**合成加粗**（把笔画往两边糊），13px 的导航上直接糊成一团。
+   手写体本来也没有"粗体"的概念——标题的层级感靠字号和位置，不靠字重。
+   这条同样是下面「表面规则」里 `.el-card__header` 不再写 font-weight 的原因。 */
+html[data-wb-theme='paper'] .el-card__header,
+html[data-wb-theme='paper'] .hero-greet,
+html[data-wb-theme='paper'] .logo-text,
+html[data-wb-theme='paper'] .menu .el-menu-item,
+html[data-wb-theme='paper'] .menu .el-sub-menu__title,
+html[data-wb-theme='paper'] .field-label {
+  font-family: var(--wb-font-display);
+  font-weight: 400;
+}
+
+/* 卡片头里的操作控件（按钮 / 标签 / 单选 / 输入框）是"操作"不是"标题"，留在正文衬线上 */
+html[data-wb-theme='paper'] .el-card__header :where(
+  .el-button,
+  .el-tag,
+  .el-radio-button__inner,
+  .el-checkbox__label,
+  .el-input__wrapper,
+  .el-input__inner,
+  .el-select__placeholder,
+  .el-switch,
+  .el-link
+) {
+  font-family: var(--wb-font-ui);
+}
+
+/* ==================== 表面规则 ==================== */
+
+/* 正文：微增字距（学术排版的呼吸感）。0.01em 在 14px 下约 0.14px/字，不影响任何布局宽度 */
+html[data-wb-theme='paper'] body {
+  letter-spacing: 0.01em;
+}
+
+/* ---- 纸片：厚度阴影 + 角上一段和纸胶带 ----
+   两样都要：只给一道柔和投影会像"发光"——纸是有厚度的实体，贴上去沿边缘投的是**硬边**。
+   `--paper-lift` = 两层 1px 实色线画出纸边 + 一道短而收的落影。
+
+   ★ 判定规则：**页面级面板**与**列表里的卡片**才算"一张纸"。
+   各页面自绘的面板不是 el-card，必须逐个点名——笔记（`.sidebar` / `.editor-pane`）、
+   项目管理（`.side` / `.proj-card`）、AI 实验区与日常工具（`.tab-block`）**都不用 el-card**，
+   只挂 `.el-card` 的话这几页一个胶带都没有（用户 2026-09-19 反馈）。
+   **面板里的方框不算纸**（`.stat-card` / `.cd-card` / `.chart-box` / `.bal-card` / `.an-card` /
+   `.pl-list`）：它们是"画在纸上的框"，也算纸的话一页会到处是胶带；其中 `.stat-card` 另有
+   图章处理（见下面「盖章」段），更不该再贴胶带。
+
+   ⚠️ `overflow: visible` 是**故意的**：EP 给 `.el-card`、笔记页给 `.editor-pane` 都设了 hidden，
+   胶带要想"压过纸边"就必须允许溢出（否则会被裁掉、看着像贴在卡片里的小贴纸）。
+   paper 主题里圆角只有 3px、卡片头也没有底色，所以放开裁剪不会露出方角。
+   ⚠️ 加 `position: relative` 前确认过：这几类里唯一的绝对定位子元素（`.pc-check`、`.chart-empty`）
+      要么父元素本来就 relative，要么用行内 `style="position: relative"` 自己兜住了。 */
+html[data-wb-theme='paper'] :is(.el-card, .sidebar, .editor-pane, .side, .proj-card, .tab-block) {
+  position: relative; /* 胶带伪元素的定位基准 */
+  overflow: visible;
+  box-shadow: var(--paper-lift);
+}
+/* 胶带：左上角斜贴一条，`mix-blend-mode: multiply` 让它在纸上呈现"半透明压深"的效果
+   （真胶带是透光的，直接给不透明色会像贴纸）。两端用 clip-path 切出不规则斜口，避免方块感。 */
+html[data-wb-theme='paper']
+  :is(.el-card, .sidebar, .editor-pane, .side, .proj-card, .tab-block)::after {
+  content: '';
+  position: absolute;
+  top: -8px;
+  left: 20px;
+  width: 58px;
+  height: 18px;
+  background: var(--paper-tape);
+  /* 沿长边做一点深浅不匀 + 两端斜切，模拟手撕的胶带 */
+  clip-path: polygon(3% 0, 97% 6%, 100% 94%, 0 100%);
+  transform: rotate(-4deg);
+  transform-origin: center;
+  mix-blend-mode: multiply;
+  pointer-events: none;
+  box-shadow: 0 1px 2px rgba(21, 21, 21, 0.08);
+}
+/* ⚠️ 每张卡都在同一个位置同一个角度，读起来会像"UI 装饰"而不是"手贴的胶带"。
+   所以按奇偶换边、换角度、换长度——手贴的东西不会一模一样。
+   用 nth-of-type 而不是 nth-child：卡片常被包在 .col / .page 等不同父级里，
+   nth-of-type 在每个父级内各自计数，正好能形成交替。 */
+html[data-wb-theme='paper']
+  :is(.el-card, .sidebar, .editor-pane, .side, .proj-card, .tab-block):nth-of-type(even)::after {
+  left: auto;
+  right: 26px;
+  width: 50px;
+  height: 17px;
+  transform: rotate(3.5deg);
+}
+/* 首页问候条也是"贴上去的纸片"，同样给厚度（它没有卡片头，不需要胶带） */
+html[data-wb-theme='paper'] .hero {
+  box-shadow: var(--paper-lift);
+}
+/* 快捷入口：每一格都是一张小便签纸 */
+html[data-wb-theme='paper'] .sc-item {
+  box-shadow: var(--paper-lift);
+}
+/* 悬停时"抬起来一点"——比原来那道强调色投影更符合纸的物理感 */
+html[data-wb-theme='paper'] .sc-item:hover {
+  box-shadow: 0 1px 0 var(--wb-border-light), 0 2px 0 var(--wb-border-lighter),
+    0 9px 14px -7px rgba(21, 21, 21, 0.26);
+}
+/* 卡片头：LaTeX 观感——衬线/手写标题 + 一条实心铅笔线（booktabs 的规矩：标题上下有线、中间无线）
+   ⚠️ 字重不在这里写：字体与字重都在上面「手写体」段统一管（楷体没有粗体，写 600 会合成加粗发糊） */
+html[data-wb-theme='paper'] .el-card__header {
+  background: transparent;
+  border-bottom: 1px solid var(--wb-border);
+  letter-spacing: 0.02em;
+}
+
+/* 表格：booktabs 式——表头上下各一条稍重的线、行间用更淡的线，没有竖线 */
+html[data-wb-theme='paper'] .el-table th.el-table__cell {
+  background: transparent;
+  border-top: 1px solid var(--wb-border-dark);
+  border-bottom: 1px solid var(--wb-border-dark);
+  font-weight: 600;
+}
+html[data-wb-theme='paper'] .el-table td.el-table__cell {
+  border-bottom: 1px solid var(--wb-border-lighter);
+}
+
+/* 输入框：纸面底色 + 铅笔框（EP 的输入框用 inset box-shadow 当边框，所以同步改 box-shadow） */
+html[data-wb-theme='paper'] .el-input__wrapper,
+html[data-wb-theme='paper'] .el-textarea__inner {
+  background: var(--wb-surface);
+  box-shadow: 0 0 0 1px var(--wb-border) inset;
+}
+html[data-wb-theme='paper'] .el-input__wrapper.is-focus,
+html[data-wb-theme='paper'] .el-textarea__inner:focus {
+  box-shadow: 0 0 0 1px var(--wb-text-regular) inset;
+}
+
+/* 小字号找补：衬线在 12~13px 上偏"虚"，给最小的那类正文标签加半档字重（方案 §4.3 的风险条）。
+   ⚠️ 导航项**不在此列**——它们已换手写体、必须保持 400（见上面「手写体」段的说明）。 */
+html[data-wb-theme='paper'] .el-tag {
+  font-weight: 500;
+}
+
+/* ==================== 图标语言（第三种：细线墨色，无底）====================
+   macOS 那套是「彩色渐变 + 圆角方形 + 白色字形」，Claude 是「细线 + 淡暖底」，
+   paper 则更彻底：**连底都不要，只有一支墨线**——像手绘在纸上的记号。
+   靠 container 限定选择器区分位置，覆盖必须带 html[data-wb-theme] 前缀（AppIcon 内部是 scoped 样式）。 */
+html[data-wb-theme='paper'] .logo .app-icon,
+html[data-wb-theme='paper'] .sc-item .app-icon {
+  background: none;
+  box-shadow: none;
+  border-radius: 0;
+  color: var(--wb-text);
+}
+html[data-wb-theme='paper'] .logo .app-icon::before,
+html[data-wb-theme='paper'] .sc-item .app-icon::before {
+  display: none; /* 去掉 macOS 那层镜面高光 */
+}
+html[data-wb-theme='paper'] .logo .app-icon .app-icon__glyph {
+  font-size: calc(var(--ai-size) * 0.9);
+}
+html[data-wb-theme='paper'] .sc-item .app-icon .app-icon__glyph {
+  /* 没有色块兜底，字形要占满盒子，否则 30px 的框里只有 16px 的线 */
+  font-size: calc(var(--ai-size) * 0.72);
+}
+/* 笔触细一点：Lucide 默认 stroke-width 是 2（写在 svg 属性上），
+   CSS 覆盖它的优先级更高，子 path 会继承 */
+html[data-wb-theme='paper'] .menu .el-icon svg,
+html[data-wb-theme='paper'] .sc-item .app-icon svg {
+  stroke-width: 1.6;
+}
+/* 侧栏未选中图标：铅笔灰 */
+html[data-wb-theme='paper'] .menu .el-menu-item:not(.is-active) > .el-icon,
+html[data-wb-theme='paper'] .menu .el-sub-menu__title > .el-icon {
+  color: var(--wb-text-faint);
+}
+
+/* ==================== 活页装订：内容区左缘打一排圆孔 ====================
+   位置选在**内容区的左缘**（不是窗口最左）——活页本的孔在书脊那一侧，
+   而这里"侧栏＝书脊、内容区＝内页"，孔正落到两者交界处，符合物理直觉。
+   ⚠️ 圆孔只有 7~21px 宽，所以主区的 padding-left 要给到 32px，
+      否则孔会和卡片叠在一起（卡片从 padding 之后开始）。 */
+/* ⚠️ 选择器必须用 `.app-main`（布局主区专属的钩子类），**不能用 `.main`**：
+   `.main` 是"页面主区"这种很常见的类名，`ProjectsView` 里就有一个自己的 `<main class="main">`
+   （右栏项目列表）。用 `.main` 的话那个内层元素也会被打上一排孔、还多吃 32px 左内边距，
+   结果项目管理页出现**两排打孔**（用户 2026-09-19 反馈）。
+   加钩子类而不是收紧成 `.el-main.main`，是为了让主题不必依赖 EP 的类名，也不会再被页内同名类撞上。 */
+html[data-wb-theme='paper'] .app-main {
+  padding-left: 32px;
+  background-image: radial-gradient(
+    circle at 14px 15px,
+    var(--wb-fill-dark) 0 5.4px,
+    rgba(21, 21, 21, 0.14) 5.4px 6.6px,
+    transparent 6.6px
+  );
+  background-size: 28px 60px; /* 每 60px 一个孔，横向 28px 一格只放一个 */
+  background-repeat: repeat-y;
+  /* ⚠️ 必须保持默认的 `background-attachment: scroll`，**不要用 fixed**：
+     设了 fixed 之后 `background-position: 0 0` 锚的是**视口**而不是本元素，
+     孔会落到视口 x=14（也就是侧栏底下）被裁掉，内容区一个孔都看不见；
+     配 `repeat-y` 又不会横向铺第二列，于是整排孔静默消失（踩过）。
+     用 scroll 时锚的是自身的 padding box → 孔正好落在内容区左缘 x=14。
+     物理上也更对：孔是"打在这一页上"的，跟着内容一起滚才合理。 */
+}
+
+/* ==================== 统计框：把方框做成"盖上去的图章" ====================
+   纸上的图章有三个特征：① 朱红单色；② 边框是"印出来"的（双线、有轻重）；
+   ③ 盖得不太正（微微歪）。三条都做上就够像了，不必真的去做撕边纹理。
+   ★ 落点 = 各处「几个数字并排」的统计方框：日常工具的成绩一览（`.gpa-cards`）、
+     日常工具的健康跑（`.stat-cards`）、首页健康跑的四个数（`.run-stats .rs`）。
+     要盖就整组一起盖——只盖成绩那一组会显得另外几组"没做完"（用户 2026-09-19 反馈）。
+   ⚠️ 不要写成裸的 `.stat-card` / `.rs`：这类通用类名别处也可能用，逐个限定在容器内更安全。
+   ⚠️ 也不要把它们加进上面「一张纸」的清单：图章是**印在纸上**的，不是贴上去的纸。 */
+html[data-wb-theme='paper'] :is(.gpa-cards, .stat-cards) .stat-card,
+html[data-wb-theme='paper'] .run-stats .rs {
+  background: transparent;
+  border: 2px solid color-mix(in srgb, var(--el-color-primary) 64%, transparent);
+  /* 四角不等，避免"排版框"那种工整感 */
+  border-radius: 3px 2px 3px 2px;
+  /* 内圈再来一道细线 = 印油在边上的重影 */
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--el-color-primary) 22%, transparent);
+  transform: rotate(-1.6deg);
+  opacity: 0.94; /* 印油不会 100% 均匀 */
+}
+/* 交替反向歪一点，像一格格手盖上去的 */
+html[data-wb-theme='paper'] :is(.gpa-cards, .stat-cards) .stat-card:nth-child(even),
+html[data-wb-theme='paper'] .run-stats .rs:nth-child(even) {
+  transform: rotate(1.3deg);
+}
+html[data-wb-theme='paper'] :is(.gpa-cards, .stat-cards) .stat-card .stat-num,
+html[data-wb-theme='paper'] .run-stats .rs .rs-num {
+  color: color-mix(in srgb, var(--el-color-primary) 90%, transparent);
+}
+html[data-wb-theme='paper'] :is(.gpa-cards, .stat-cards) .stat-card .stat-label,
+html[data-wb-theme='paper'] .run-stats .rs .rs-label {
+  color: color-mix(in srgb, var(--el-color-primary) 66%, transparent);
+}

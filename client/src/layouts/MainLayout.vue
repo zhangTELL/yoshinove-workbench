@@ -179,7 +179,7 @@ onUnmounted(() => {
       </el-menu>
     </el-aside>
     <el-container>
-      <el-main class="main">
+      <el-main class="main app-main">
         <router-view />
       </el-main>
     </el-container>

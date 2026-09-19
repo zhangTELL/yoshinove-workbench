@@ -167,6 +167,6 @@ onBeforeUnmount(() => {
   height: 100%;
   min-height: 200px;
   overflow: hidden;
-  border-radius: 6px;
+  border-radius: var(--wb-radius-base);
 }
 </style>

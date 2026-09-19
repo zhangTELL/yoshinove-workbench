@@ -70,8 +70,17 @@
   --wb-radius-base: 6px;
   --wb-radius-small: 4px;
   --wb-radius-card: 9px;
+  /* 胶囊档（分裂按钮 .oia 这类"半径=半高"的造型）。
+     ⚠️ 它**不由界面圆角滑块驱动**（appearance.ts 不写它），所以是**主题可覆盖**的：
+     默认 9999px（渲染上等于半高），paper 那种零圆角主题可以把它压成 0。
+     需要"胶囊但不要固定像素"时用它，别无脑跟 base 档——那会把胶囊变成圆角矩形。 */
+  --wb-radius-pill: 9999px;
 
-  /* ---------- 字体 ---------- */
+  /* ---------- 字体 ----------
+     --wb-font-ui      ：正文/UI 字体（桥接到 --el-font-family，EP 组件都跟它）
+     --wb-font-display ：**标题/标字**字体。默认与正文同源；主题可以把它换成另一套
+                         （claude 用它上衬线、paper 用它上手写体），落到哪些元素由主题自己点名。
+     --wb-font-mono    ：等宽（代码） */
   --wb-font-ui: 'Segoe UI', 'Microsoft YaHei', system-ui, sans-serif;
   --wb-font-display: var(--wb-font-ui);
   --wb-font-mono: ui-monospace, 'Cascadia Mono', Consolas, 'Courier New', monospace;

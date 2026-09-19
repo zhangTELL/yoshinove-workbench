@@ -86,6 +86,11 @@ textarea {
 /* 大表面（卡片 / 对话框 / 气泡卡片 / 确认框 / 通知 / 引导）→ card 档 */
 .el-card {
   --el-card-border-radius: var(--wb-radius-card);
+  /* 卡片底色：EP 走 --el-card-bg-color → var(--el-fill-color-blank)，而本文件**刻意没有**映射
+     --el-fill-color-blank ⇒ 卡片永远是纯白、不跟主题的 --wb-surface 走。
+     实测影响：paper 主题的"卡片比纸底略深一档"一直没生效（卡片是 #fff、页面是 #fffff8）。
+     default / macOS / claude 的 --wb-surface 本来就是 #ffffff，所以这条对它们是恒等映射。 */
+  --el-card-bg-color: var(--wb-surface);
 }
 .el-dialog {
   --el-dialog-border-radius: var(--wb-radius-card);

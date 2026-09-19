@@ -1027,7 +1027,7 @@ function onWindowResize() {
 .tab-block {
   background: var(--el-bg-color);
   border: 1px solid var(--el-border-color);
-  border-radius: 8px;
+  border-radius: var(--wb-radius-card);
   padding: 16px;
 }
 .tab-toolbar {
@@ -1049,7 +1049,7 @@ function onWindowResize() {
 .stat-card {
   background: var(--el-bg-color);
   border: 1px solid var(--el-border-color);
-  border-radius: 8px;
+  border-radius: var(--wb-radius-card);
   padding: 14px 22px;
   text-align: center;
   min-width: 110px;
@@ -1090,7 +1090,7 @@ function onWindowResize() {
   height: 360px;
   background: var(--el-bg-color);
   border: 1px solid var(--el-border-color);
-  border-radius: 10px;
+  border-radius: var(--wb-radius-card);
   padding: 8px;
 }
 @media (max-width: 900px) {
@@ -1114,7 +1114,7 @@ function onWindowResize() {
   gap: 14px;
   padding: 8px 12px;
   border: 1px solid var(--el-border-color);
-  border-radius: 8px;
+  border-radius: var(--wb-radius-card);
   margin-bottom: 6px;
   background: var(--el-bg-color);
   font-size: 13px;
@@ -1187,7 +1187,7 @@ function onWindowResize() {
   display: flex;
   align-items: center;
   justify-content: center;
-  border-radius: 8px;
+  border-radius: var(--wb-radius-card);
   background: var(--el-bg-color);
   font-size: 15px;
   color: var(--el-text-color-regular);
@@ -1215,7 +1215,7 @@ function onWindowResize() {
   position: relative;
   background: var(--el-bg-color);
   border: 1px solid var(--el-border-color);
-  border-radius: 10px;
+  border-radius: var(--wb-radius-card);
   padding: 16px;
   text-align: center;
   cursor: pointer;
@@ -1354,7 +1354,7 @@ function onWindowResize() {
 .pomo-bar {
   width: 18px;
   background: var(--el-color-primary);
-  border-radius: 3px 3px 0 0;
+  border-radius: var(--wb-radius-small) 3px 0 0;
   min-height: 2px;
 }
 .pomo-bar-label {
@@ -1376,7 +1376,7 @@ function onWindowResize() {
 .chart-box {
   background: var(--el-bg-color);
   border: 1px solid var(--el-border-color);
-  border-radius: 8px;
+  border-radius: var(--wb-radius-card);
   height: 260px;
 }
 .chart-empty {

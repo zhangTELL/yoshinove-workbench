@@ -1041,7 +1041,7 @@ onUnmounted(() => {
   flex: 0 0 220px;
   background: var(--el-bg-color);
   border: 1px solid var(--el-border-color);
-  border-radius: 10px;
+  border-radius: var(--wb-radius-card);
   padding: 12px 8px;
 }
 .side-head {
@@ -1064,7 +1064,7 @@ onUnmounted(() => {
   align-items: center;
   gap: 6px;
   padding: 7px 10px;
-  border-radius: 7px;
+  border-radius: var(--wb-radius-base);
   font-size: 13px;
   color: var(--el-text-color-regular);
   cursor: pointer;
@@ -1157,7 +1157,7 @@ onUnmounted(() => {
   padding: 14px 16px;
   background: var(--el-bg-color);
   border: 1px solid var(--el-border-color);
-  border-radius: 10px;
+  border-radius: var(--wb-radius-card);
 }
 .pc-main {
   min-width: 0;
@@ -1273,7 +1273,7 @@ onUnmounted(() => {
   max-height: 46vh;
   overflow-y: auto;
   border: 1px solid var(--el-border-color-lighter);
-  border-radius: 8px;
+  border-radius: var(--wb-radius-card);
 }
 .cand-row {
   display: flex;
@@ -1359,7 +1359,7 @@ onUnmounted(() => {
   min-height: 120px;
   overflow-y: auto;
   border: 1px solid var(--el-border-color-lighter);
-  border-radius: 8px;
+  border-radius: var(--wb-radius-card);
 }
 .pk-item {
   display: flex;
@@ -1423,7 +1423,7 @@ onUnmounted(() => {
   color: var(--el-text-color-regular);
   background: var(--el-color-primary-light-9);
   border: 1px solid var(--el-color-primary-light-7);
-  border-radius: 8px;
+  border-radius: var(--wb-radius-card);
 }
 
 /* ===== 卡片多选框 ===== */
@@ -1468,7 +1468,7 @@ onUnmounted(() => {
   max-height: 300px;
   overflow-y: auto;
   border: 1px solid var(--el-border-color-lighter);
-  border-radius: 8px;
+  border-radius: var(--wb-radius-card);
 }
 .rule-row {
   display: flex;
@@ -1513,7 +1513,7 @@ onUnmounted(() => {
   max-height: 340px;
   overflow-y: auto;
   border: 1px solid var(--el-border-color-lighter);
-  border-radius: 8px;
+  border-radius: var(--wb-radius-card);
 }
 .loc-row {
   display: flex;

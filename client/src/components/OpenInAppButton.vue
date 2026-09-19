@@ -122,7 +122,7 @@ onMounted(load)
   align-items: stretch;
   height: 28px;
   border: 1px solid var(--el-border-color);
-  border-radius: 14px;
+  border-radius: var(--wb-radius-pill);
   overflow: hidden;
   background: var(--el-bg-color);
 }
@@ -167,7 +167,7 @@ onMounted(load)
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  border-radius: 4px;
+  border-radius: var(--wb-radius-small);
   background: var(--el-fill-color-dark);
   color: var(--el-text-color-regular);
   font-size: 10px;

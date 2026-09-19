@@ -266,7 +266,7 @@ function reset() {
   flex: 1;
   min-width: 240px;
   background: var(--el-fill-color-light);
-  border-radius: 8px;
+  border-radius: var(--wb-radius-card);
   padding: 8px 14px;
 }
 .ad-btn {
@@ -274,7 +274,7 @@ function reset() {
   font-size: 12px;
   line-height: 1;
   padding: 7px 14px;
-  border-radius: 6px;
+  border-radius: var(--wb-radius-base);
 }
 .ad-link {
   font-size: 13px;
@@ -289,13 +289,13 @@ function reset() {
 }
 .ad-bars i {
   width: 7px;
-  border-radius: 2px 2px 0 0;
+  border-radius: var(--wb-radius-small) 2px 0 0;
   opacity: 0.85;
 }
 .swatch {
   width: 28px;
   height: 28px;
-  border-radius: 6px;
+  border-radius: var(--wb-radius-base);
   border: 2px solid transparent;
   box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.08) inset;
   cursor: pointer;
@@ -318,7 +318,7 @@ function reset() {
 }
 .theme-item {
   border: 1px solid var(--el-border-color);
-  border-radius: 10px;
+  border-radius: var(--wb-radius-card);
   padding: 10px;
   cursor: pointer;
   transition: border-color 0.15s, box-shadow 0.15s;
@@ -332,7 +332,7 @@ function reset() {
 }
 .theme-preview {
   height: 76px;
-  border-radius: 6px;
+  border-radius: var(--wb-radius-base);
   padding: 10px;
   display: flex;
   flex-direction: column;
@@ -343,11 +343,11 @@ function reset() {
 .tp-bar {
   height: 8px;
   width: 40%;
-  border-radius: 3px;
+  border-radius: var(--wb-radius-small);
 }
 .tp-line {
   height: 6px;
-  border-radius: 3px;
+  border-radius: var(--wb-radius-small);
 }
 .tp-chip {
   position: absolute;
@@ -355,7 +355,7 @@ function reset() {
   bottom: 10px;
   width: 26px;
   height: 12px;
-  border-radius: 6px;
+  border-radius: var(--wb-radius-base);
   opacity: 0.85;
 }
 .theme-name {
@@ -385,7 +385,7 @@ function reset() {
   right: 6px;
   bottom: 6px;
   padding: 1px 6px;
-  border-radius: 4px;
+  border-radius: var(--wb-radius-small);
   font-size: 11px;
   color: #fff;
   background: rgba(0, 0, 0, 0.45);
@@ -421,7 +421,7 @@ function reset() {
 .font-preview {
   margin-top: 16px;
   background: var(--el-fill-color-light);
-  border-radius: 8px;
+  border-radius: var(--wb-radius-card);
   padding: 14px 16px;
 }
 .preview-label {

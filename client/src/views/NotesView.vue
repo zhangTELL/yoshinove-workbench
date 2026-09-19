@@ -500,7 +500,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
   flex-shrink: 0;
   background: var(--el-bg-color);
   border: 1px solid var(--el-border-color);
-  border-radius: 8px;
+  border-radius: var(--wb-radius-card);
   padding: 12px;
   display: flex;
   flex-direction: column;
@@ -524,7 +524,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
   font-size: 13px;
   color: var(--el-text-color-regular);
   padding: 4px 8px;
-  border-radius: 4px;
+  border-radius: var(--wb-radius-small);
   cursor: pointer;
 }
 .filter-item:hover {
@@ -544,7 +544,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
 }
 .note-item {
   padding: 8px;
-  border-radius: 6px;
+  border-radius: var(--wb-radius-base);
   cursor: pointer;
 }
 .note-item:hover {
@@ -581,7 +581,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
   flex: 1;
   background: var(--el-bg-color);
   border: 1px solid var(--el-border-color);
-  border-radius: 8px;
+  border-radius: var(--wb-radius-card);
   padding: 12px;
   display: flex;
   flex-direction: column;
@@ -604,6 +604,6 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
   flex: 1;
 }
 .editor :deep(.vditor) {
-  border-radius: 6px;
+  border-radius: var(--wb-radius-base);
 }
 </style>

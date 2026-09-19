@@ -22,12 +22,18 @@ html,
 body {
   background-color: var(--wb-bg);
 }
-/* 主题底纹（如 macOS 那套的柔和渐变"壁纸"）：默认 none，固定不随滚动 */
+/* 页面底 + 主题底纹：
+   · --wb-bg-image：主题的"壁纸"（macOS 用柔和渐变；其它主题 none）
+   · --wb-texture  ：主题的"纸纹"（paper 用 repeating-linear-gradient 画横格；其它主题 none）
+   两者都铺在 body 上、都 fixed 不随滚动，第二层（壁纸）用 cover 撑满。
+   ⚠️ 主内容区（.el-main / MainLayout 的 .main）与 EP 各容器**都没有背景色**，
+      所以 body 上的纹理能透到内容区里——这是纸纹能看见的前提，别给它们加底。 */
 body {
-  background-image: var(--wb-bg-image);
-  background-attachment: fixed;
-  background-size: cover;
-  background-repeat: no-repeat;
+  background-color: var(--wb-bg);
+  background-image: var(--wb-texture), var(--wb-bg-image);
+  background-size: var(--wb-texture-size), cover;
+  background-repeat: repeat, no-repeat;
+  background-attachment: fixed, fixed;
 }
 #app {
   background: transparent;

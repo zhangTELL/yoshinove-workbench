@@ -615,7 +615,7 @@ watch([mode, () => current.value?.rel], async () => {
   display: flex;
   flex-direction: column;
   border: 1px solid var(--el-border-color);
-  border-radius: 8px;
+  border-radius: var(--wb-radius-card);
   overflow: hidden;
   background: var(--el-bg-color);
 }
@@ -673,7 +673,7 @@ watch([mode, () => current.value?.rel], async () => {
   font-size: 10px;
   line-height: 14px;
   padding: 0 4px;
-  border-radius: 3px;
+  border-radius: var(--wb-radius-small);
   color: var(--el-color-success);
   border: 1px solid var(--el-color-success-light-5);
   flex: none;
@@ -730,7 +730,7 @@ watch([mode, () => current.value?.rel], async () => {
   flex: 1;
   min-height: 0;
   border: 1px solid var(--el-border-color);
-  border-radius: 8px;
+  border-radius: var(--wb-radius-card);
   overflow: hidden;
   background: var(--el-bg-color);
 }
@@ -757,7 +757,7 @@ watch([mode, () => current.value?.rel], async () => {
 .pf-markdown :deep(pre) {
   background: var(--el-fill-color-light);
   border: 1px solid var(--el-border-color-extra-light);
-  border-radius: 6px;
+  border-radius: var(--wb-radius-base);
   padding: 12px 14px;
   overflow: auto;
 }
@@ -794,13 +794,13 @@ watch([mode, () => current.value?.rel], async () => {
   padding: 5px;
   background: var(--el-bg-color-overlay);
   border: 1px solid var(--el-border-color-light);
-  border-radius: 8px;
+  border-radius: var(--wb-radius-card);
   box-shadow: var(--el-box-shadow-light);
 }
 .pf-ctx-item {
   padding: 6px 12px;
   font-size: 13px;
-  border-radius: 5px;
+  border-radius: var(--wb-radius-base);
   color: var(--el-text-color-primary);
   cursor: pointer;
   user-select: none;
@@ -844,7 +844,7 @@ watch([mode, () => current.value?.rel], async () => {
 }
 .gd-dirty {
   border: 1px solid var(--el-border-color-lighter);
-  border-radius: 8px;
+  border-radius: var(--wb-radius-card);
   overflow: hidden;
   max-height: 260px;
   overflow-y: auto;

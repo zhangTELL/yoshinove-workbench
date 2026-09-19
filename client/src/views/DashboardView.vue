@@ -654,7 +654,7 @@ onMounted(loadAll)
   gap: 16px;
   background: linear-gradient(135deg, var(--wb-hero-from) 0%, var(--wb-hero-to) 100%);
   border: 1px solid var(--wb-hero-border);
-  border-radius: 12px;
+  border-radius: var(--wb-radius-card);
   padding: 18px 22px;
 }
 .hero-main {
@@ -810,7 +810,7 @@ onMounted(loadAll)
   gap: 12px;
   padding: 10px 12px;
   border: 1px solid var(--el-border-color);
-  border-radius: 8px;
+  border-radius: var(--wb-radius-card);
   background: var(--el-bg-color);
 }
 .cls-item.now {
@@ -824,7 +824,7 @@ onMounted(loadAll)
   width: 4px;
   align-self: stretch;
   min-height: 38px;
-  border-radius: 2px;
+  border-radius: var(--wb-radius-small);
   flex-shrink: 0;
 }
 .cls-time {
@@ -872,7 +872,7 @@ onMounted(loadAll)
 .empty-next {
   margin-top: 12px;
   background: var(--el-fill-color-light);
-  border-radius: 8px;
+  border-radius: var(--wb-radius-card);
   padding: 12px 14px;
   display: flex;
   flex-wrap: wrap;
@@ -883,7 +883,7 @@ onMounted(loadAll)
   font-size: 12px;
   color: var(--el-color-primary);
   background: var(--el-color-primary-light-9);
-  border-radius: 4px;
+  border-radius: var(--wb-radius-small);
   padding: 2px 8px;
 }
 .en-name {
@@ -913,7 +913,7 @@ onMounted(loadAll)
   gap: 12px;
   padding: 9px 12px;
   border: 1px solid var(--el-border-color);
-  border-radius: 8px;
+  border-radius: var(--wb-radius-card);
   cursor: pointer;
 }
 .cd-item:hover {
@@ -966,7 +966,7 @@ onMounted(loadAll)
   gap: 12px;
   padding: 9px 12px;
   border: 1px solid var(--el-border-color);
-  border-radius: 8px;
+  border-radius: var(--wb-radius-card);
   text-decoration: none;
   color: inherit;
 }
@@ -1004,7 +1004,7 @@ onMounted(loadAll)
   color: var(--el-text-color-secondary);
   line-height: 1.7;
   background: var(--el-fill-color-light);
-  border-radius: 6px;
+  border-radius: var(--wb-radius-base);
   padding: 8px 12px;
 }
 
@@ -1032,7 +1032,7 @@ onMounted(loadAll)
 }
 .rs {
   background: var(--el-fill-color-light);
-  border-radius: 8px;
+  border-radius: var(--wb-radius-card);
   padding: 10px 6px;
   text-align: center;
 }

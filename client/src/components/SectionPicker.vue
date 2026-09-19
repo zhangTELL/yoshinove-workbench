@@ -58,7 +58,7 @@ function isPicked(n: number): boolean {
 .sp-cell {
   height: 34px;
   border: 1px solid var(--el-border-color-light);
-  border-radius: 5px;
+  border-radius: var(--wb-radius-base);
   background: var(--el-bg-color);
   color: var(--el-text-color-regular);
   font-size: 13px;
