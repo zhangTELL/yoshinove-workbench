@@ -1,7 +1,8 @@
 import type { ReminderRule, SectionTime, WeekParity } from '@wb/shared'
+import { resolveDate, toDateStr } from '@wb/shared'
 import { eq } from 'drizzle-orm'
 import { db, sqlite } from '../db/index.js'
-import { chaoxingHomework, courses, courseSessions, semesters } from '../db/schema.js'
+import { chaoxingHomework, courses, courseSessions, scheduleSwaps, semesters } from '../db/schema.js'
 import { findLowBalances, pruneSnapshots, refreshProfiles, selectProfiles } from '../services/balanceStore.js'
 import { syncAll, upsertWorks } from '../services/chaoxing.js'
 import { sendPushPlus, sendWecom } from '../services/push.js'
@@ -194,7 +195,6 @@ export async function scanAndRemind(): Promise<void> {
   const week = Math.floor((today.getTime() - start.getTime()) / 86400000 / 7) + 1
   if (week < 1 || week > semester.totalWeeks) return
 
-  const weekday = (today.getDay() + 6) % 7 + 1
   const nowMin = now.getHours() * 60 + now.getMinutes()
 
   const sectionTimes = JSON.parse(semester.sectionTimes) as SectionTime[]
@@ -202,11 +202,22 @@ export async function scanAndRemind(): Promise<void> {
   const allCourses = db.select().from(courses).where(eq(courses.semesterId, semester.id)).all()
   const courseById = new Map(allCourses.map((c) => [c.id, c]))
 
+  /* 调休：今天可能是"补课日"，要按例外表把它解析成**有效取课来源**再去取课。
+     不做这一步的后果很直观——周末补周二的课时，提醒会按周六（通常是空的）推，等于不提醒；
+     而被换走的那个工作日反而会照旧推提醒。 */
+  const swapRows = db.select().from(scheduleSwaps).where(eq(scheduleSwaps.semesterId, semester.id)).all()
+  const swapMap = new Map(swapRows.map((r) => [r.date, r.sourceDate]))
+  const origin = resolveDate(
+    swapMap,
+    { startDate: semester.startDate, totalWeeks: semester.totalWeeks },
+    toDateStr(today),
+  )
+
   for (const s of sessions) {
-    if (s.weekday !== weekday) continue
+    if (s.weekday !== origin.weekday) continue
     const weeks: number[] = JSON.parse(s.weeks)
-    if (!weeks.includes(week)) continue
-    if (!weekParityMatch(s.weekParity as WeekParity, week)) continue
+    if (!weeks.includes(origin.week)) continue
+    if (!weekParityMatch(s.weekParity as WeekParity, origin.week)) continue
     const section = sectionTimes[s.startSection - 1]
     if (!section?.start) continue
     const startMin = toMinutes(section.start)

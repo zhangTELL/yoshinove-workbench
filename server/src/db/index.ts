@@ -57,6 +57,21 @@ export function ensureSchema() {
     );
     CREATE INDEX IF NOT EXISTS idx_sessions_semester ON course_sessions(semester_id);
 
+    /* 调休（日期互换）：date 这一天的课表来源是 source_date。
+       与 course_sessions 的差别：后者是"每周星期 N 上什么课"的**周模板**（weeks[] 决定哪几周），
+       本身没有"某一天"的概念；调休是"某一天借用另一天的课表"的**日期例外**，
+       所以单独立表、不动模板（详见 services/scheduleSwap.ts 的说明）。 */
+    CREATE TABLE IF NOT EXISTS schedule_swaps (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      semester_id INTEGER NOT NULL REFERENCES semesters(id) ON DELETE CASCADE,
+      date TEXT NOT NULL,
+      source_date TEXT NOT NULL,
+      created_at TEXT NOT NULL DEFAULT (datetime('now', 'localtime'))
+    );
+    CREATE INDEX IF NOT EXISTS idx_swaps_semester ON schedule_swaps(semester_id);
+    /* 同一天只能有一条来源，否则解析顺序会变得依赖插入次序 */
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_swaps_date ON schedule_swaps(semester_id, date);
+
     CREATE TABLE IF NOT EXISTS notification_log (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       channel TEXT NOT NULL,

@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import type { ChaoxingHomework, Course, CourseSession, SectionTime, Semester, WeekParity } from '@wb/shared'
-import { termOf } from '@wb/shared'
+import type { ChaoxingHomework, Course, CourseSession, ScheduleSwap, SectionTime, Semester, WeekParity } from '@wb/shared'
+import { resolveDate, swapMapOf, termOf } from '@wb/shared'
 import { computed, nextTick, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import type { InputInstance } from 'element-plus'
@@ -41,6 +41,8 @@ interface SchedulePayload {
   courses: Course[]
   /** 顶层 sessions 的 weeks 已被服务端解析成数组 */
   sessions: (Omit<CourseSession, 'weeks'> & { weeks: number[] | string })[]
+  /** 调休例外：某一天的课表来源是另一天 */
+  swaps?: ScheduleSwap[]
 }
 interface BalanceViewLite {
   profiles: { id: number; name: string }[]
@@ -113,6 +115,8 @@ const refreshedAt = ref('')
 const semesters = ref<Semester[]>([])
 const courses = ref<Course[]>([])
 const sessions = ref<SchedulePayload['sessions']>([])
+/** 调休例外（某天按另一天的课表上课），首页也必须吃它，否则调休后首页还是旧课 */
+const swaps = ref<ScheduleSwap[]>([])
 const homework = ref<ChaoxingHomework[]>([])
 const countdowns = ref<Countdown[]>([])
 const runs = ref<RunsView | null>(null)
@@ -163,6 +167,22 @@ function timeRange(startSection: number, endSection: number): string {
 }
 
 // ==================== 今日课程 ====================
+/** 调休：今天可能"按别的日期的课表上课"，所以先把有效取课来源解析出来再用 */
+const todayOrigin = computed(() =>
+  resolveDate(
+    swapMapOf(swaps.value),
+    { startDate: semester.value?.startDate ?? '', totalWeeks: totalWeeks.value },
+    todayStr.value,
+  ),
+)
+/** 今天处于调休时的来源日期（用于在卡片上标一句"按 X 的课表上课"） */
+const todaySwappedFrom = computed(() => todayOrigin.value.swappedFrom ?? null)
+/** YYYY-MM-DD → 10/6（界面上不直接露原始日期串） */
+const monthDay = (date: string) => {
+  const [, m, d] = date.split('-')
+  return `${Number(m)}/${Number(d)}`
+}
+
 interface TodayItem {
   id: number
   name: string
@@ -178,8 +198,8 @@ interface TodayItem {
 const todayItems = computed<TodayItem[]>(() => {
   const list: TodayItem[] = []
   for (const s of sessions.value) {
-    if (s.weekday !== todayWeekday.value) continue
-    if (!weeksInclude(s.weeks, s.weekParity, currentWeek.value)) continue
+    if (s.weekday !== todayOrigin.value.weekday) continue
+    if (!weeksInclude(s.weeks, s.weekParity, todayOrigin.value.week)) continue
     const c = courseById.value.get(s.courseId)
     if (!c) continue
     const a = sectionTime(s.startSection)
@@ -212,19 +232,23 @@ const todayItems = computed<TodayItem[]>(() => {
 const nextCourse = computed<{ label: string; name: string; room: string; timeText: string } | null>(() => {
   if (!semester.value || !sessions.value.length) return null
   const start = new Date(`${semester.value.startDate}T00:00:00`)
+  const cal = { startDate: semester.value.startDate, totalWeeks: totalWeeks.value }
+  const map = swapMapOf(swaps.value)
   for (let offset = 1; offset <= 7; offset++) {
     const d = new Date(now.value.getFullYear(), now.value.getMonth(), now.value.getDate() + offset)
-    const wd = d.getDay() === 0 ? 7 : d.getDay()
+    const date = fmtDate(d)
     const week = Math.floor((d.getTime() - start.getTime()) / 86400000 / 7) + 1
     if (week < 1 || week > totalWeeks.value) continue
+    // 同样要按调休解析：往后找的"最近一节课"也是那天真正会上课的内容
+    const origin = resolveDate(map, cal, date)
     const hit = sessions.value
-      .filter((s) => s.weekday === wd && weeksInclude(s.weeks, s.weekParity, week))
+      .filter((s) => s.weekday === origin.weekday && weeksInclude(s.weeks, s.weekParity, origin.week))
       .sort((a, b) => a.startSection - b.startSection)[0]
     if (!hit) continue
     const c = courseById.value.get(hit.courseId)
     if (!c) continue
-    const gap = offset === 1 ? '明天' : offset === 2 ? '后天' : `${WEEKDAY_CN[wd]}`
-    return { label: `${gap} · 第 ${week} 周`, name: c.name, room: hit.room, timeText: timeRange(hit.startSection, hit.endSection) }
+    const gap = offset === 1 ? '明天' : offset === 2 ? '后天' : `${WEEKDAY_CN[origin.weekday]}`
+    return { label: `${gap} · 第 ${origin.week} 周`, name: c.name, room: hit.room, timeText: timeRange(hit.startSection, hit.endSection) }
   }
   return null
 })
@@ -418,9 +442,11 @@ async function loadAll() {
       const sch = await get<SchedulePayload>(`/api/schedule?semesterId=${sid}`)
       courses.value = sch.courses ?? []
       sessions.value = sch.sessions ?? []
+      swaps.value = sch.swaps ?? []
     } catch {
       courses.value = []
       sessions.value = []
+      swaps.value = []
     }
   } else {
     courses.value = []
@@ -510,6 +536,12 @@ onMounted(loadAll)
           <template #header>
             <div class="card-head">
               <span>今日课程</span>
+              <!-- 调休时明确标出来：否则用户会奇怪"今天怎么是这些课" -->
+              <el-tooltip v-if="todaySwappedFrom" :content="`调休：今天按 ${todaySwappedFrom} 那天的课表上课`">
+                <el-tag size="small" type="warning" effect="plain" class="cls-swap-tag">
+                  调休 · 按 {{ monthDay(todaySwappedFrom) }} 的课表
+                </el-tag>
+              </el-tooltip>
               <el-button size="small" text @click="go('/schedule')">查看课表</el-button>
             </div>
           </template>
@@ -824,6 +856,11 @@ onMounted(loadAll)
   display: flex;
   justify-content: space-between;
   align-items: center;
+}
+/* 调休标签靠右贴在「查看课表」左边（auto 外边距吃掉 space-between 的余量） */
+.cls-swap-tag {
+  margin-left: auto;
+  margin-right: 8px;
 }
 
 /* ===== 今日课程 ===== */

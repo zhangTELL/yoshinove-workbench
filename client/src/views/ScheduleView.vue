@@ -1,9 +1,19 @@
 <script setup lang="ts">
-import type { Course, CourseSession, ReminderRule, Semester, SectionTime, WeekParity } from '@wb/shared'
+import type { Course, CourseSession, ReminderRule, ScheduleSwap, Semester, SectionTime, WeekParity } from '@wb/shared'
 import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Delete, Plus, Upload } from '@element-plus/icons-vue'
+import { ArrowRight, Delete, Download, Plus, Switch, Upload } from '@element-plus/icons-vue'
 import { useRoute, useRouter } from 'vue-router'
+import {
+  dateOfSlot,
+  inSemester,
+  isDateStr,
+  resolveDate,
+  swapMapOf,
+  toDateStr,
+  weekOfDate,
+  weekdayOfDate,
+} from '@wb/shared'
 import SectionPicker from '../components/SectionPicker.vue'
 import PushChannelCard from '../components/PushChannelCard.vue'
 import { del, get, post, put, upload } from '../api/http'
@@ -64,6 +74,8 @@ interface CourseWithSessions extends Course {
 interface ScheduleData {
   courses: CourseWithSessions[]
   sessions: CourseSession[]
+  /** 调休（日期例外）：某一天的课表来源是另一天 */
+  swaps: ScheduleSwap[]
 }
 interface ReviewRow {
   name: string
@@ -101,7 +113,7 @@ interface ParseResult {
 // ===== 状态 =====
 const semesters = ref<Semester[]>([])
 const currentSemesterId = ref<number | null>(null)
-const schedule = ref<ScheduleData>({ courses: [], sessions: [] })
+const schedule = ref<ScheduleData>({ courses: [], sessions: [], swaps: [] })
 const currentWeek = ref(1)
 const loading = ref(false)
 
@@ -109,6 +121,46 @@ const courseById = computed(() => new Map(schedule.value.courses.map((c) => [c.i
 const currentSemester = computed(() => semesters.value.find((s) => s.id === currentSemesterId.value) ?? null)
 const sectionTimes = computed<SectionTime[]>(() => currentSemester.value?.sectionTimes ?? [])
 const totalWeeks = computed(() => currentSemester.value?.totalWeeks ?? 20)
+
+// ===== 调休（日期例外）=====
+// 网格是按「周模板」画的，而调休是「某一天借用另一天的课表」，所以渲染前要把
+// 「本周第 d 天」解析成真正该去读的 (周次, 星期)。换算函数与 scheduler、首页共用一份
+// （都在 `@wb/shared`），避免三处口径分叉出"课表页有课、首页说今天没课"这种自相矛盾。
+const semesterCal = computed(() => ({
+  startDate: currentSemester.value?.startDate ?? '',
+  totalWeeks: totalWeeks.value,
+}))
+const swapMap = computed(() => swapMapOf(schedule.value.swaps ?? []))
+
+/** 本周七列各自的取课来源（含"调休来的"标记） */
+interface DayOrigin extends ReturnType<typeof resolveDate> {
+  /** 该列对应的日历日期 YYYY-MM-DD */
+  date: string
+}
+const dayOrigins = computed<DayOrigin[]>(() => {
+  const cal = semesterCal.value
+  const out: DayOrigin[] = []
+  for (let d = 1; d <= 7; d++) {
+    const date = dateOfSlot(cal, { week: currentWeek.value, weekday: d })
+    out.push({ ...resolveDate(swapMap.value, cal, date), date })
+  }
+  return out
+})
+
+/** 本周生效的调休记录（顶部提示条用；互换的两条会各出现一次，正好把两边都讲清楚） */
+const weekSwaps = computed(() => {
+  const rows = schedule.value.swaps ?? []
+  if (!rows.length || !currentSemester.value) return []
+  const dates = dayOrigins.value.map((o) => o.date)
+  return rows
+    .filter((r) => dates.includes(r.date))
+    .map((r) => ({
+      date: r.date,
+      sourceDate: r.sourceDate,
+      weekday: weekdayOfDate(r.date),
+      sourceWeekday: weekdayOfDate(r.sourceDate),
+    }))
+})
 
 const weekRange = computed(() => {
   if (!currentSemester.value) return ''
@@ -149,11 +201,13 @@ async function loadDisplaySettings() {
 }
 
 const visibleDays = computed(() => (display.showWeekend ? 7 : 5))
-/** 网格行数：取「一天课程数」与本周实际课程结束节次的较大值，避免晚课被截断 */
+/** 网格行数：取「一天课程数」与本周实际课程结束节次的较大值，避免晚课被截断。
+    节次上限的判断要按**解析后的来源**来算——调休可能把晚课换进本周（或把晚课换走）。 */
 const effectiveRows = computed(() => {
+  const origins = dayOrigins.value
   let maxSection = 0
   for (const s of schedule.value.sessions) {
-    if (weeksInclude(s.weeks, s.weekParity, currentWeek.value)) {
+    if (origins.some((o) => o.weekday === s.weekday && weeksInclude(s.weeks, s.weekParity, o.week))) {
       maxSection = Math.max(maxSection, s.endSection)
     }
   }
@@ -264,12 +318,13 @@ async function loadSemesters() {
 
 async function loadSchedule() {
   if (!currentSemesterId.value) {
-    schedule.value = { courses: [], sessions: [] }
+    schedule.value = { courses: [], sessions: [], swaps: [] }
     return
   }
   loading.value = true
   try {
-    schedule.value = await get<ScheduleData>(`/api/schedule?semesterId=${currentSemesterId.value}`)
+    const data = await get<ScheduleData>(`/api/schedule?semesterId=${currentSemesterId.value}`)
+    schedule.value = { ...data, swaps: data.swaps ?? [] }
   } finally {
     loading.value = false
   }
@@ -313,16 +368,23 @@ function guessCurrentWeek() {
 // ===== 周视图 =====
 interface GridItem extends CourseSession {
   course: Course
+  /** 有值表示这张卡是"调休换进来的"（来源于别的日期），此时禁止拖拽，只能改调休规则 */
+  swapFrom?: string
 }
 
 const gridItems = computed<GridItem[][]>(() => {
   const cols: GridItem[][] = [[], [], [], [], [], [], []]
-  for (const s of schedule.value.sessions) {
-    const course = courseById.value.get(s.courseId)
-    if (!course) continue
-    if (!weeksInclude(s.weeks, s.weekParity, currentWeek.value)) continue
-    cols[s.weekday - 1].push({ ...s, course })
-  }
+  // ⚠️ 按**解析后的来源**取课：第 i 列读的是 dayOrigins[i] 指向的那一天（周次, 星期），
+  //    调休就是把某个来源换成另一天。这里不要再用 `s.weekday - 1` 直接入列。
+  dayOrigins.value.forEach((origin, i) => {
+    for (const s of schedule.value.sessions) {
+      if (s.weekday !== origin.weekday) continue
+      if (!weeksInclude(s.weeks, s.weekParity, origin.week)) continue
+      const course = courseById.value.get(s.courseId)
+      if (!course) continue
+      cols[i].push({ ...s, course, swapFrom: origin.swappedFrom })
+    }
+  })
   for (const col of cols) col.sort((a, b) => a.startSection - b.startSection)
   return cols
 })
@@ -332,10 +394,13 @@ const gridLayout = computed(() => {
   return gridItems.value.map((items) => {
     const sorted = [...items].sort((a, b) => a.startSection - b.startSection || a.endSection - b.endSection)
     // 1. 划分冲突簇：新课程与当前簇内任一课程时间重叠则并入，否则开新簇
+    //    节次是闭区间，必须用 >= / <=：「1-2 节」与「2-3 节」在第 2 节相撞。
+    //    写严格不等号会让这里判成不冲突、下面分栏却又判成互相占用，
+    //    结果是两节课各拿满宽、卡片直接叠在一起渲染（口径须与下方 every 互为反面）
     const clusters: GridItem[][] = []
     for (const it of sorted) {
       const last = clusters[clusters.length - 1]
-      if (last && last.some((o) => o.endSection > it.startSection && o.startSection < it.endSection)) {
+      if (last && last.some((o) => o.endSection >= it.startSection && o.startSection <= it.endSection)) {
         last.push(it)
       } else {
         clusters.push([it])
@@ -429,6 +494,336 @@ function gridVarsStyle(): Record<string, string> {
 const headGridStyle = computed<Record<string, string>>(() => ({
   gridTemplateColumns: `64px repeat(${visibleDays.value}, 1fr)`,
 }))
+
+// ===== 调休（日期互换）=====
+//
+// 语义：`目标日 ← 源日`，即"目标日按源日那天的课表上课"。
+//   · 互换（默认）：正反各记一条 —— 调休常态，周末补周二的课、周二放假
+//   · 仅覆盖：只记一条 —— 把源日的课复制到目标日，源日不变
+// 记录本身是**例外层**，不动周模板：删掉即完全恢复（见 shared 里 ScheduleSwap 的说明）。
+
+const swapDialogVisible = ref(false)
+const swapSaving = ref(false)
+const swapForm = reactive({
+  sourceDate: '',
+  targetDate: '',
+  mode: 'swap' as 'swap' | 'copy',
+})
+
+/** 某一天"原本"有哪些课（不看调休）。用于预览：应用时会先清掉涉及这两天的旧规则，
+    所以结果是"源日的原课表搬到目标日"，预览必须按原课表算，不能按已解析后的内容算。 */
+function rawSessionsOfDate(date: string): GridItem[] {
+  const cal = semesterCal.value
+  const slot = { week: weekOfDate(date, cal), weekday: weekdayOfDate(date) }
+  const out: GridItem[] = []
+  for (const s of schedule.value.sessions) {
+    if (s.weekday !== slot.weekday) continue
+    if (!weeksInclude(s.weeks, s.weekParity, slot.week)) continue
+    const course = courseById.value.get(s.courseId)
+    if (!course) continue
+    out.push({ ...s, course })
+  }
+  return out.sort((a, b) => a.startSection - b.startSection)
+}
+
+/** 日期 → 「9/27（周日·第 4 周）」 */
+function dateLabel(date: string): string {
+  const cal = semesterCal.value
+  if (!isDateStr(date)) return '—'
+  const [, m, d] = date.split('-')
+  return `${Number(m)}/${Number(d)}（${WEEKDAYS[weekdayOfDate(date) - 1]}·第 ${weekOfDate(date, cal)} 周）`
+}
+
+/** 日期 → 「9/27（周日）」 */
+function shortDateLabel(date: string): string {
+  if (!isDateStr(date)) return '—'
+  const [, m, d] = date.split('-')
+  return `${Number(m)}/${Number(d)}（${WEEKDAYS[weekdayOfDate(date) - 1]}）`
+}
+
+/** 输入是否可用；返回一句人话错误，合法时为 null */
+const swapError = computed<string | null>(() => {
+  const cal = semesterCal.value
+  const { sourceDate, targetDate } = swapForm
+  if (!isDateStr(sourceDate) || !isDateStr(targetDate)) return '请选择源日期与目标日期'
+  if (sourceDate === targetDate) return '源日期与目标日期不能是同一天'
+  for (const [label, d] of [
+    ['源日期', sourceDate],
+    ['目标日期', targetDate],
+  ] as const) {
+    if (!inSemester(d, cal)) {
+      return `${label} ${d} 不在本学期范围内（${currentSemester.value?.startDate} 起共 ${totalWeeks.value} 周）`
+    }
+  }
+  return null
+})
+
+const swapPreview = computed(() => {
+  if (swapError.value) return null
+  const { sourceDate, targetDate } = swapForm
+  return {
+    sourceLabel: dateLabel(sourceDate),
+    targetLabel: dateLabel(targetDate),
+    sourceCourses: rawSessionsOfDate(sourceDate),
+    targetCourses: rawSessionsOfDate(targetDate),
+  }
+})
+
+/** 打开时给一组合理的初值：源 = 本周第一个有课的日子，目标 = 本周第一个没课的日子（通常是周末） */
+function openSwapDialog() {
+  const origins = dayOrigins.value
+  if (!origins.length) return
+  const counts = origins.map((_, i) => (gridItems.value[i] ?? []).length)
+  const withCourse = counts.findIndex((c) => c > 0)
+  const empty = counts.findIndex((c) => c === 0)
+  const srcIdx = withCourse >= 0 ? withCourse : 0
+  let tgtIdx = empty >= 0 ? empty : 6
+  if (tgtIdx === srcIdx) tgtIdx = srcIdx === 6 ? 5 : 6
+  swapForm.sourceDate = origins[srcIdx].date
+  swapForm.targetDate = origins[tgtIdx].date
+  swapForm.mode = 'swap'
+  swapDialogVisible.value = true
+}
+
+async function submitSwap() {
+  if (swapError.value) {
+    ElMessage.warning(swapError.value)
+    return
+  }
+  swapSaving.value = true
+  try {
+    const res = await post<{
+      ok: boolean
+      replaced: number
+      swaps: ScheduleSwap[]
+      effect: { target: { date: string; week: number } }
+    }>('/api/schedule/swaps', {
+      semesterId: currentSemesterId.value,
+      sourceDate: swapForm.sourceDate,
+      targetDate: swapForm.targetDate,
+      mode: swapForm.mode,
+    })
+    // 只换例外表，课程/排课都没动，所以直接把 swaps 换掉即可（顺便省一次整表请求）
+    schedule.value = { ...schedule.value, swaps: res.swaps ?? [] }
+    currentWeek.value = res.effect?.target?.week ?? currentWeek.value
+    swapDialogVisible.value = false
+    const done =
+      swapForm.mode === 'swap'
+        ? `${dateLabel(swapForm.targetDate)} 与 ${dateLabel(swapForm.sourceDate)} 的课表已互换`
+        : `已把 ${dateLabel(swapForm.sourceDate)} 的课表复制到 ${dateLabel(swapForm.targetDate)}`
+    // 一天只能有一个来源，所以新规则会把涉及这两天（或指向这两天）的旧调休一并替换掉——
+    // 动到了无关的旧记录时必须说出来，否则用户会发现"之前设的调休不见了"却不知道原因
+    if (res.replaced > 0) {
+      ElMessage.warning(`${done}（原有 ${res.replaced} 条涉及这两天的调休已被替换）`)
+    } else {
+      ElMessage.success(done)
+    }
+  } catch (e) {
+    ElMessage.error((e as Error).message)
+  } finally {
+    swapSaving.value = false
+  }
+}
+
+/** 恢复某一天：删掉涉及它的全部例外记录（互换会一次删掉正反两条） */
+async function restoreSwap(date: string) {
+  try {
+    await del(`/api/schedule/swaps?semesterId=${currentSemesterId.value}&date=${date}`)
+    await loadSchedule()
+  } catch (e) {
+    ElMessage.error((e as Error).message)
+  }
+}
+
+// ===== 拖拽改时间 =====
+//
+// 落点 = 目标星期 + 目标起始节次，**节数不变**（拖一个 1-2 节的课到第 2 节 = 2-3 节）。
+// 两种作用范围：
+//   · 本周（默认）：只改这一周 —— 实现上是把该排课本周"摘"出来单独成一条（周模板不受影响），
+//                   对应"这周调休/临时换课"；
+//   · 所有周：改的是周模板本身 —— 对应"这门课从今天起就是周六上了"，
+//             所以提示里必须写清楚影响周数，避免误操作把整学期改了。
+const dragScope = ref<'week' | 'all'>('week')
+
+interface DragState {
+  sessionId: number
+  /** 卡片当前所在列（1=周一） */
+  weekday: number
+  startSection: number
+  span: number
+  name: string
+  /** 该排课一共覆盖几周（提示用） */
+  weekCount: number
+}
+const dragState = ref<DragState | null>(null)
+const dropPreview = ref<{ weekday: number; start: number; end: number; invalid?: string } | null>(null)
+
+function onCardDragStart(item: GridItem, dayIdx: number, e: DragEvent) {
+  // 调休换进来的卡片不允许拖：它不是"这一列的课"，拖它等于同时改两天，语义会变得没法解释
+  if (item.swapFrom) {
+    e.preventDefault()
+    return
+  }
+  const weekCount = (Array.isArray(item.weeks) ? item.weeks : []).filter((w) =>
+    weeksInclude(item.weeks, item.weekParity, w),
+  ).length
+  dragState.value = {
+    sessionId: item.id,
+    weekday: dayIdx + 1,
+    startSection: item.startSection,
+    span: item.endSection - item.startSection + 1,
+    name: item.course.name,
+    weekCount,
+  }
+  dropPreview.value = null
+  if (e.dataTransfer) {
+    e.dataTransfer.effectAllowed = 'move'
+    e.dataTransfer.setData('text/plain', String(item.id))
+  }
+}
+
+function onCardDragEnd() {
+  dragState.value = null
+  dropPreview.value = null
+}
+
+/** 鼠标纵向位置 → 落在第几节（每节 SLOT_H 高），并夹到网格范围内 */
+function sectionFromEvent(colEl: HTMLElement, e: DragEvent): number {
+  const rect = colEl.getBoundingClientRect()
+  const idx = Math.floor((e.clientY - rect.top) / SLOT_H)
+  return Math.min(Math.max(idx + 1, 1), Math.max(1, effectiveRows.value))
+}
+
+/** 目标格子里是否已经有课（闭区间判定，与 gridLayout 的分栏口径一致） */
+function occupiedAt(dayIdx: number, start: number, end: number): GridItem | null {
+  for (const it of gridItems.value[dayIdx] ?? []) {
+    if (it.id === dragState.value?.sessionId) continue
+    if (it.endSection >= start && it.startSection <= end) return it
+  }
+  return null
+}
+
+/** 「所有周」模式下还要看**别的周**：目标格子在要移动的排课覆盖到的任意一周里被占用就算冲突 */
+function templateConflict(dayIdx: number, start: number, end: number): { week: number; name: string } | null {
+  const st = dragState.value
+  if (!st) return null
+  const moved = schedule.value.sessions.find((s) => s.id === st.sessionId)
+  if (!moved) return null
+  const movedWeeks = (Array.isArray(moved.weeks) ? moved.weeks : []).filter((w) =>
+    weeksInclude(moved.weeks, moved.weekParity, w),
+  )
+  for (const other of schedule.value.sessions) {
+    if (other.id === moved.id || other.weekday !== dayIdx + 1) continue
+    if (!(other.endSection >= start && other.startSection <= end)) continue
+    const otherWeeks = Array.isArray(other.weeks) ? other.weeks : []
+    const hit = movedWeeks.find((w) => otherWeeks.includes(w) && weeksInclude(other.weeks, other.weekParity, w))
+    if (hit != null) {
+      return { week: hit, name: courseById.value.get(other.courseId)?.name ?? '其它课' }
+    }
+  }
+  return null
+}
+
+function onColDragOver(dayIdx: number, e: DragEvent) {
+  const st = dragState.value
+  if (!st) return
+  e.preventDefault()
+  if (e.dataTransfer) e.dataTransfer.dropEffect = 'move'
+  const start = sectionFromEvent(e.currentTarget as HTMLElement, e)
+  const end = start + st.span - 1
+  let invalid: string | undefined
+  if (end > effectiveRows.value) {
+    invalid = '这里放不下（会超出网格底部）'
+  } else {
+    const hit = dragScope.value === 'week'
+      ? occupiedAt(dayIdx, start, end)
+      : null
+    if (hit) {
+      invalid = `与《${hit.course.name}》冲突（${hit.startSection}-${hit.endSection} 节）`
+    } else if (dragScope.value === 'all') {
+      const tc = templateConflict(dayIdx, start, end)
+      if (tc) invalid = `第 ${tc.week} 周与《${tc.name}》冲突`
+    }
+  }
+  dropPreview.value = { weekday: dayIdx + 1, start, end, invalid }
+}
+
+function onColDragLeave(dayIdx: number, e: DragEvent) {
+  if (!dragState.value) return
+  // 只在真正离开这一列时才清预览（列内子元素之间移动也会触发 dragleave）
+  const to = e.relatedTarget as Node | null
+  if (to && (e.currentTarget as HTMLElement).contains(to)) return
+  if (dropPreview.value?.weekday === dayIdx + 1) dropPreview.value = null
+}
+
+async function onColDrop(dayIdx: number, e: DragEvent) {
+  const st = dragState.value
+  const p = dropPreview.value
+  e.preventDefault()
+  onCardDragEnd()
+  if (!st || !p || p.weekday !== dayIdx + 1) return
+  if (p.invalid) {
+    ElMessage.warning(p.invalid)
+    return
+  }
+  if (p.start === st.startSection && st.weekday === p.weekday) return // 没挪动
+
+  const moved = schedule.value.sessions.find((s) => s.id === st.sessionId)
+  if (!moved) return
+  const toText = `${WEEKDAYS[p.weekday - 1]} 第 ${p.start}-${p.end} 节`
+  try {
+    if (dragScope.value === 'all') {
+      await put(`/api/schedule/session/${moved.id}`, {
+        weekday: p.weekday,
+        startSection: p.start,
+        endSection: p.end,
+      })
+      ElMessage.success(
+        `《${st.name}》已移到 ${toText}（对该课的**所有周**生效${st.weekCount > 1 ? `，共 ${st.weekCount} 周` : ''}）`,
+      )
+    } else {
+      const rest = (Array.isArray(moved.weeks) ? moved.weeks : []).filter((w) => w !== currentWeek.value)
+      if (!rest.length) {
+        // 本来就只排在这一周：直接改，不产生多余的排课记录
+        await put(`/api/schedule/session/${moved.id}`, {
+          weekday: p.weekday,
+          startSection: p.start,
+          endSection: p.end,
+        })
+        ElMessage.success(`《${st.name}》本周已移到 ${toText}`)
+      } else {
+        // 把本周"摘"出来单独成一条，其余周保持原时间（周模板不受影响，等于本周的一次临时换课）
+        await put(`/api/schedule/session/${moved.id}`, { weeks: rest })
+        await post('/api/schedule/session', {
+          courseId: moved.courseId,
+          semesterId: moved.semesterId,
+          weekday: p.weekday,
+          startSection: p.start,
+          endSection: p.end,
+          weeks: [currentWeek.value],
+          weekParity: 'all',
+          room: moved.room,
+        })
+        ElMessage.success(
+          `《${st.name}》本周已移到 ${toText}；其余 ${rest.length} 周仍按原时间上课`,
+        )
+      }
+    }
+    await loadSchedule()
+  } catch (err) {
+    ElMessage.error((err as Error).message)
+  }
+}
+
+/** 预览块的位置（与 cardStyle 同一套几何） */
+function dropPreviewStyle(): Record<string, string> {
+  const p = dropPreview.value
+  if (!p) return {}
+  return {
+    top: `${(p.start - 1) * SLOT_H + 2}px`,
+    height: `${(p.end - p.start + 1) * SLOT_H - 8}px`,
+  }
+}
 
 // ===== 学期管理 =====
 const semesterDialogVisible = ref(false)
@@ -628,6 +1023,27 @@ async function confirmImport() {
   }
 }
 
+// ===== 导出互通 JSON =====
+// 给 Android 端「Yoshinove课表」导入用；字段名与后端 /api/schedule/export 一致（camelCase）。
+// 不带 id，两端各自本地编号，课程靠「学期 + 课程名」对齐。
+async function exportSemester() {
+  if (!currentSemesterId.value) return
+  try {
+    const doc = await get<Record<string, unknown>>(`/api/schedule/export?semesterId=${currentSemesterId.value}`)
+    const name = (doc.semesters as { name?: string }[] | undefined)?.[0]?.name ?? currentSemester.value?.name ?? '课表'
+    const blob = new Blob([JSON.stringify(doc, null, 2)], { type: 'application/json' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `${name}.json`
+    a.click()
+    URL.revokeObjectURL(url)
+    ElMessage.success(`已导出：${name}.json`)
+  } catch (e) {
+    ElMessage.error(`导出失败：${(e as Error).message}`)
+  }
+}
+
 // ===== 编辑排课 =====
 const editDialogVisible = ref(false)
 const editForm = ref({
@@ -707,6 +1123,9 @@ async function removeSession() {
       <el-upload ref="uploadRef" :show-file-list="false" accept=".pdf" :auto-upload="false" :on-change="onPdfChange">
         <el-button type="primary" :icon="Upload" :loading="importing" :disabled="!currentSemesterId">导入课表 PDF</el-button>
       </el-upload>
+      <el-tooltip content="导出为 Android 端「Yoshinove课表」可导入的 JSON">
+        <el-button :icon="Download" :disabled="!currentSemesterId" @click="exportSemester">导出 JSON</el-button>
+      </el-tooltip>
     </div>
 
     <!-- 学期信息条 -->
@@ -730,7 +1149,34 @@ async function removeSession() {
         <el-option v-for="w in totalWeeks" :key="w" :value="w" :label="`第 ${w} 周`" />
       </el-select>
       <span class="week-range">{{ weekRange }}</span>
+      <el-tooltip content="调休 / 补课：把某一天的课表换到另一天（例如「周日上周二的课」）">
+        <el-button class="swap-entry" :icon="Switch" @click="openSwapDialog">日期互换</el-button>
+      </el-tooltip>
+      <div class="drag-scope">
+        <span class="ds-label">拖动课程时</span>
+        <el-tooltip content="「本周」只改这一周（适合临时换课/调休，不动周模板）；「所有周」改的是这门课以后的固定时间">
+          <el-radio-group v-model="dragScope" size="small">
+            <el-radio-button value="week">只改本周</el-radio-button>
+            <el-radio-button value="all">改所有周</el-radio-button>
+          </el-radio-group>
+        </el-tooltip>
+      </div>
       <span v-if="!schedule.sessions.length" class="hint">该学期还没有课表，点上方「导入课表 PDF」</span>
+    </div>
+
+    <!-- 本周调休提示：不写清楚的话，用户看到某天的课"跑"到别的天会以为数据坏了 -->
+    <div v-if="weekSwaps.length" class="swap-banner">
+      <el-icon class="sb-icon"><Switch /></el-icon>
+      <span class="sb-text">
+        本周调休：
+        <template v-for="(s, i) in weekSwaps" :key="s.date">
+          <span class="sb-item">
+            <b>{{ shortDateLabel(s.date) }}</b> 按 {{ shortDateLabel(s.sourceDate) }} 的课表上课
+            <el-button link type="primary" size="small" @click="restoreSwap(s.date)">恢复</el-button>
+          </span>
+          <span v-if="i < weekSwaps.length - 1" class="sb-sep">·</span>
+        </template>
+      </span>
     </div>
 
     <!-- 周视图网格 -->
@@ -743,8 +1189,19 @@ async function removeSession() {
         />
         <div class="grid-head" :style="headGridStyle">
           <div class="head-cell label-cell">节次</div>
-          <div v-for="i in visibleDays" :key="i" class="head-cell" :class="{ today: isTodayCol(i - 1) }">
+          <div
+            v-for="i in visibleDays"
+            :key="i"
+            class="head-cell"
+            :class="{ today: isTodayCol(i - 1), swapped: !!dayOrigins[i - 1]?.swappedFrom }"
+          >
             {{ WEEKDAYS[i - 1] }}
+            <el-tooltip
+              v-if="dayOrigins[i - 1]?.swappedFrom"
+              :content="`调休：本日按 ${dateLabel(dayOrigins[i - 1].swappedFrom!)} 的课表上课`"
+            >
+              <span class="swap-dot">调休</span>
+            </el-tooltip>
           </div>
         </div>
         <div class="grid-body" :style="headGridStyle">
@@ -760,17 +1217,33 @@ async function removeSession() {
             v-for="(day, dayIdx) in gridLayout.slice(0, visibleDays)"
             :key="dayIdx"
             class="day-col"
-            :class="{ today: isTodayCol(dayIdx) }"
+            :class="{ today: isTodayCol(dayIdx), 'drop-active': !!dropPreview && dropPreview.weekday === dayIdx + 1 && !dropPreview.invalid }"
             :style="gridRowsStyle()"
+            @dragover="onColDragOver(dayIdx, $event)"
+            @dragleave="onColDragLeave(dayIdx, $event)"
+            @drop="onColDrop(dayIdx, $event)"
           >
             <div v-for="i in effectiveRows" :key="i" class="slot-cell" />
+            <!-- 落点预览：直接按目标节次画一个同尺寸的虚框，拖的时候就能看出"会落在哪几节" -->
+            <div
+              v-if="dropPreview && dropPreview.weekday === dayIdx + 1"
+              class="drop-preview"
+              :class="{ bad: !!dropPreview.invalid }"
+              :style="dropPreviewStyle()"
+            >
+              <span>{{ dropPreview.invalid || `${dragState?.name ?? ''} · ${dropPreview.start}-${dropPreview.end} 节` }}</span>
+            </div>
             <div
               v-for="{ item, lane, laneCount } in day.placed"
               :key="item.id"
               class="course-card"
+              :class="{ 'is-dragging': dragState?.sessionId === item.id, 'is-swapped': !!item.swapFrom }"
               :style="cardStyle(item, lane, laneCount)"
-              :title="`${item.course.name}\n${item.room}\n${item.course.teacher}\n${weeksText(item.weeks, item.weekParity)}周`"
+              :title="`${item.course.name}\n${item.room}\n${item.course.teacher}\n${weeksText(item.weeks, item.weekParity)}周\n${item.swapFrom ? '（本卡是调休换来的，不能拖动）' : '可拖动到别的格子改时间'}`"
+              :draggable="!item.swapFrom"
               @click="openEdit(item)"
+              @dragstart="onCardDragStart(item, dayIdx, $event)"
+              @dragend="onCardDragEnd"
             >
               <div class="course-name" :style="{ color: item.course.color }">{{ item.course.name }}</div>
               <div class="course-room">{{ item.room }}</div>
@@ -778,6 +1251,7 @@ async function removeSession() {
               <div v-if="item.weekParity !== 'all'" class="course-parity">
                 {{ item.weekParity === 'odd' ? '单周' : '双周' }}
               </div>
+              <span v-if="item.swapFrom" class="course-swap">调休</span>
             </div>
           </div>
         </div>
@@ -836,6 +1310,106 @@ async function removeSession() {
     </div>
 
     <!-- 新建学期 -->
+    <!-- ===== 调休 / 日期互换 ===== -->
+    <el-dialog v-model="swapDialogVisible" title="调休 / 日期互换" width="660px" top="6vh">
+      <el-alert type="info" :closable="false" show-icon class="swap-tip">
+        <template #title>典型用法：把「被放假那天」的课换到「要去补课的周末」</template>
+        <div class="swap-tip-body">
+          例：<b>10/6（周二）</b>放掉、<b>9/27（周日）</b>补课 —— 源日期选 <b>10/6</b>、目标日期选 <b>9/27</b>、
+          模式选「互换」：9/27 当天就按 10/6 的课表上课，10/6 则空出来。
+        </div>
+      </el-alert>
+
+      <div class="swap-form">
+        <div class="sf-row">
+          <span class="sf-label">源日期<span class="sf-sub">课表从这天搬走</span></span>
+          <el-date-picker
+            v-model="swapForm.sourceDate"
+            type="date"
+            value-format="YYYY-MM-DD"
+            placeholder="选择源日期"
+            style="width: 180px"
+          />
+          <el-button link type="primary" @click="swapForm.sourceDate = toDateStr(new Date())">今天</el-button>
+          <span class="sf-preview">{{ shortDateLabel(swapForm.sourceDate) }}</span>
+        </div>
+
+        <div class="sf-row">
+          <span class="sf-label">目标日期<span class="sf-sub">这天的课表被替换</span></span>
+          <el-date-picker
+            v-model="swapForm.targetDate"
+            type="date"
+            value-format="YYYY-MM-DD"
+            placeholder="选择目标日期"
+            style="width: 180px"
+          />
+          <el-button link type="primary" @click="swapForm.targetDate = dayOrigins[6]?.date ?? ''">本周日</el-button>
+          <span class="sf-preview">{{ shortDateLabel(swapForm.targetDate) }}</span>
+        </div>
+
+        <div class="sf-row">
+          <span class="sf-label">模式<span class="sf-sub"> </span></span>
+          <el-radio-group v-model="swapForm.mode">
+            <el-radio-button value="swap">互换（调休）</el-radio-button>
+            <el-radio-button value="copy">仅复制覆盖</el-radio-button>
+          </el-radio-group>
+          <span class="sf-hint">
+            {{ swapForm.mode === 'swap' ? '两天课表对调：源日空出来、目标日按源日上课' : '只把源日的课复制到目标日，源日不变' }}
+          </span>
+        </div>
+      </div>
+
+      <el-alert v-if="swapError" type="warning" :closable="false" show-icon :title="swapError" />
+      <div v-else-if="swapPreview" class="swap-preview">
+        <div class="sp-row">
+          <span class="sp-when">{{ swapPreview.targetLabel }}</span>
+          <el-icon class="sp-arrow"><ArrowRight /></el-icon>
+          <div class="sp-what">
+            <template v-if="swapPreview.sourceCourses.length">
+              <span
+                v-for="c in swapPreview.sourceCourses"
+                :key="c.id"
+                class="sp-chip"
+                :style="{ borderColor: c.course.color, color: c.course.color }"
+              >
+                {{ c.course.name }} {{ c.startSection }}-{{ c.endSection }} 节
+              </span>
+            </template>
+            <span v-else class="sp-empty">源日期当天没有课 → 替换后这天会变空</span>
+            <div v-if="swapPreview.targetCourses.length" class="sp-old">
+              原本有（将被覆盖）：{{ swapPreview.targetCourses.map((c) => c.course.name).join('、') }}
+            </div>
+          </div>
+        </div>
+        <div v-if="swapForm.mode === 'swap'" class="sp-row">
+          <span class="sp-when">{{ swapPreview.sourceLabel }}</span>
+          <el-icon class="sp-arrow"><ArrowRight /></el-icon>
+          <div class="sp-what">
+            <template v-if="swapPreview.targetCourses.length">
+              <span
+                v-for="c in swapPreview.targetCourses"
+                :key="c.id"
+                class="sp-chip"
+                :style="{ borderColor: c.course.color, color: c.course.color }"
+              >
+                {{ c.course.name }} {{ c.startSection }}-{{ c.endSection }} 节
+              </span>
+            </template>
+            <span v-else class="sp-empty">对方当天没有课 → 源日互换后会空出来（放假那天正该如此）</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="swap-foot">
+        调休只改「日期例外」，不动课程与排课本身；随时可在网格上方点「恢复」还原。
+      </div>
+
+      <template #footer>
+        <el-button @click="swapDialogVisible = false">取消</el-button>
+        <el-button type="primary" :loading="swapSaving" @click="submitSwap">应用</el-button>
+      </template>
+    </el-dialog>
+
     <el-dialog v-model="semesterDialogVisible" title="新建学期" width="420px">
       <el-form label-width="110px">
         <el-form-item label="学期名称">
@@ -1127,6 +1701,10 @@ async function removeSession() {
 .week-bar {
   display: flex;
   align-items: center;
+  /* 周条上现在挂着：上/下周、回到本周、周次选择、日期范围、日期互换、拖动范围开关——
+     窄窗口下必须允许换行，否则会把右边的控件挤出可视区 */
+  flex-wrap: wrap;
+  row-gap: 8px;
 }
 .back-today {
   margin-left: 12px;
@@ -1266,5 +1844,194 @@ async function removeSession() {
   margin-left: 10px;
   color: var(--el-text-color-secondary);
   font-size: 12px;
+}
+
+/* ==================== 调休（日期互换）==================== */
+.swap-entry {
+  margin-left: 12px;
+}
+.drag-scope {
+  display: flex;
+  align-items: center;
+  margin-left: 12px;
+}
+.ds-label {
+  margin-right: 6px;
+  font-size: 12px;
+  color: var(--el-text-color-secondary);
+}
+/* 本周调休提示条：调休后课程会"出现在别的日子"，不明确写出来会被当成数据错乱 */
+.swap-banner {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin-top: 10px;
+  padding: 6px 12px;
+  border: 1px solid var(--el-color-primary-light-7);
+  background: var(--el-color-primary-light-9);
+  border-radius: var(--wb-radius-base);
+  font-size: 13px;
+  line-height: 1.9;
+  color: var(--el-text-color-regular);
+}
+.sb-icon {
+  margin-top: 5px;
+  color: var(--el-color-primary);
+}
+.sb-item b {
+  color: var(--el-text-color-primary);
+}
+.sb-sep {
+  margin: 0 6px;
+  color: var(--el-text-color-placeholder);
+}
+.head-cell.swapped {
+  color: var(--el-color-primary);
+}
+.swap-dot {
+  display: inline-block;
+  margin-left: 4px;
+  padding: 0 4px;
+  font-size: 10px;
+  font-weight: 400;
+  line-height: 15px;
+  vertical-align: 1px;
+  color: var(--el-color-primary);
+  border: 1px solid currentColor;
+  border-radius: var(--wb-radius-small);
+}
+.course-swap {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  padding: 0 3px;
+  font-size: 10px;
+  line-height: 14px;
+  color: var(--el-color-primary);
+  border: 1px solid currentColor;
+  border-radius: var(--wb-radius-small);
+  background: var(--el-bg-color);
+}
+.course-card.is-swapped {
+  cursor: default;
+}
+.course-card.is-dragging {
+  opacity: 0.35;
+}
+.day-col.drop-active {
+  background: color-mix(in srgb, var(--el-color-primary) 6%, transparent);
+  border-radius: var(--wb-radius-base);
+}
+/* 落点预览：与卡片同一套几何（top/height 由 dropPreviewStyle 给），拖的时候能直接看出落在哪几节 */
+.drop-preview {
+  position: absolute;
+  left: 2px;
+  right: 2px;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1.5px dashed var(--el-color-primary);
+  border-radius: var(--wb-radius-card);
+  background: color-mix(in srgb, var(--el-color-primary) 10%, transparent);
+  color: var(--el-color-primary);
+  font-size: 12px;
+  text-align: center;
+  padding: 0 6px;
+  pointer-events: none;
+  box-sizing: border-box;
+}
+.drop-preview.bad {
+  border-color: var(--el-color-danger);
+  /* 冲突时预览块正好压在"被占用"的那张卡上，半透明会让两层文字糊在一起 —— 用接近不透明的底压掉它 */
+  background: color-mix(in srgb, var(--el-bg-color) 88%, var(--el-color-danger));
+  color: var(--el-color-danger);
+}
+/* ==================== 调休对话框 ==================== */
+.swap-tip {
+  margin-bottom: 14px;
+}
+.swap-tip-body {
+  font-size: 12px;
+  line-height: 1.7;
+}
+.swap-form {
+  margin-bottom: 14px;
+}
+.sf-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
+  flex-wrap: wrap;
+}
+.sf-label {
+  width: 128px;
+  flex-shrink: 0;
+  font-size: 13px;
+  color: var(--el-text-color-regular);
+}
+.sf-sub {
+  display: block;
+  font-size: 11px;
+  color: var(--el-text-color-placeholder);
+}
+.sf-preview {
+  font-size: 12px;
+  color: var(--el-text-color-secondary);
+}
+.sf-hint {
+  flex: 1;
+  font-size: 12px;
+  color: var(--el-text-color-secondary);
+}
+.swap-preview {
+  padding: 8px 12px;
+  border: 1px solid var(--el-border-color-lighter);
+  border-radius: var(--wb-radius-card);
+  background: var(--el-fill-color-lighter);
+}
+.sp-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 3px 0;
+}
+.sp-when {
+  width: 168px;
+  flex-shrink: 0;
+  font-size: 12px;
+  color: var(--el-text-color-regular);
+}
+.sp-arrow {
+  margin-top: 3px;
+  color: var(--el-text-color-placeholder);
+}
+.sp-what {
+  flex: 1;
+  min-width: 0;
+}
+.sp-chip {
+  display: inline-block;
+  margin: 0 6px 4px 0;
+  padding: 1px 6px;
+  font-size: 12px;
+  border: 1px solid currentColor;
+  border-radius: var(--wb-radius-small);
+  background: var(--el-bg-color);
+}
+.sp-empty {
+  font-size: 12px;
+  color: var(--el-text-color-secondary);
+}
+.sp-old {
+  margin-top: 2px;
+  font-size: 11px;
+  color: var(--el-text-color-placeholder);
+}
+.swap-foot {
+  margin-top: 10px;
+  font-size: 12px;
+  color: var(--el-text-color-secondary);
 }
 </style>

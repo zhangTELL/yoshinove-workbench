@@ -39,6 +39,16 @@ export const courseSessions = sqliteTable('course_sessions', {
   note: text('note').notNull().default(''),
 })
 
+export const scheduleSwaps = sqliteTable('schedule_swaps', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  semesterId: integer('semester_id').notNull(),
+  /** 被替换的日期 YYYY-MM-DD：这一天的课表来自 sourceDate */
+  date: text('date').notNull(),
+  /** 课表来源日期 YYYY-MM-DD */
+  sourceDate: text('source_date').notNull(),
+  createdAt: text('created_at').notNull(),
+})
+
 export const notificationLog = sqliteTable('notification_log', {
   id: integer('id').primaryKey({ autoIncrement: true }),
   channel: text('channel').notNull(),

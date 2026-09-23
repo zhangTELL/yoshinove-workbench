@@ -45,6 +45,116 @@ export interface CourseSession {
   note: string
 }
 
+/**
+ * 调休（日期互换）：`date` 这一天的课表来源是 `sourceDate`。
+ *
+ * 课表的底层数据是**周模板**（`CourseSession`：每周星期 N 上什么课、`weeks[]` 决定哪几周），
+ * 没有"某一天"的概念。调休（周末补课 / 节假日停课）是**日期例外**，所以单独一层：
+ * 互换产生两行（A→B 与 B→A），只覆盖产生一行，删除即恢复。
+ */
+export interface ScheduleSwap {
+  id: number
+  semesterId: number
+  /** 被替换的日期 YYYY-MM-DD */
+  date: string
+  /** 课表来源日期 YYYY-MM-DD */
+  sourceDate: string
+  createdAt: string
+}
+
+// ==================== 课表日期换算（服务端与前端共用一份）====================
+//
+// 为什么放在 shared：这三个口径**必须完全一致**，否则会出现"课表页显示有课、首页说今天没课"
+// 这种自相矛盾：
+//   · 服务端在 scheduler 里按"今天的有效来源"推上课提醒；
+//   · 课表页按"当前周的每一天"渲染网格；
+//   · 首页按"今天"挑今日课程、按"往后 7 天"挑最近一节课。
+// 之前这几处的周次算法是各写一遍的，加调休时正好把日期换算收敛到这里。
+
+/** 做日期换算只需要学期这两个字段 */
+export interface SemesterCal {
+  /** 第一周周一，YYYY-MM-DD */
+  startDate: string
+  totalWeeks: number
+}
+
+/** 一天的定位：第几周 + 星期几（1=周一 … 7=周日） */
+export interface Slot {
+  week: number
+  weekday: number
+}
+
+/** 解析结果：`origin` 是真正要去读的 (周次, 星期)；`swappedFrom` 有值表示这一天是调休来的 */
+export interface ResolvedSlot extends Slot {
+  /** 课表来源日期（仅"被调休替换过"的日子有值），用于在界面上标注"本日按 X 的课表上课" */
+  swappedFrom?: string
+}
+
+/** 日期字符串 → 本地零点；**不要**直接 `new Date('2026-09-07')`，那会按 UTC 解析、整体偏一天 */
+function atMidnight(date: string): Date {
+  return new Date(`${date}T00:00:00`)
+}
+
+function pad2(n: number): string {
+  return String(n).padStart(2, '0')
+}
+
+/** Date → YYYY-MM-DD（本地时区） */
+export function toDateStr(d: Date): string {
+  return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`
+}
+
+/** YYYY-MM-DD 是否合法（顺带挡住 2026-02-30 这类溢出日期） */
+export function isDateStr(s: unknown): s is string {
+  if (typeof s !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(s)) return false
+  return toDateStr(atMidnight(s)) === s
+}
+
+/** 星期几：1=周一 … 7=周日（JS 的 getDay() 里周日是 0） */
+export function weekdayOfDate(date: string): number {
+  return ((atMidnight(date).getDay() + 6) % 7) + 1
+}
+
+/** 第几周：第一周的周一 = sem.startDate */
+export function weekOfDate(date: string, sem: SemesterCal): number {
+  const diff = atMidnight(date).getTime() - atMidnight(sem.startDate).getTime()
+  return Math.floor(diff / 86400000 / 7) + 1
+}
+
+/** (第几周, 星期几) → 日期 */
+export function dateOfSlot(sem: SemesterCal, slot: Slot): string {
+  const d = atMidnight(sem.startDate)
+  d.setDate(d.getDate() + (slot.week - 1) * 7 + (slot.weekday - 1))
+  return toDateStr(d)
+}
+
+/** 日期是否落在本学期内（用它挡住"把课程换到学期外"的输入） */
+export function inSemester(date: string, sem: SemesterCal): boolean {
+  const w = weekOfDate(date, sem)
+  return w >= 1 && w <= sem.totalWeeks
+}
+
+/** date → sourceDate 的例外表 */
+export type SwapMap = Map<string, string>
+
+/**
+ * 解析某一天的「有效取课来源」。
+ *
+ * ⚠️ **只做一跳，不做链式**：互换会写成 A→B 与 B→A 两行，这时 A 取 B 的**原**课表、
+ * B 取 A 的**原**课表。若做链式（A→B 再顺着 B→A 找回去），互换会被解析成"什么都没有"。
+ * 实现上就是：把日期映射成 (周次, 星期) 后**直接**去取，不再追问来源日自己的来源。
+ */
+export function resolveDate(swaps: SwapMap, sem: SemesterCal, date: string): ResolvedSlot {
+  const src = swaps.get(date)
+  if (!src) return { week: weekOfDate(date, sem), weekday: weekdayOfDate(date) }
+  return { week: weekOfDate(src, sem), weekday: weekdayOfDate(src), swappedFrom: src }
+}
+
+/** 由例外表构造「date → 它借走了谁的课表」的反向索引（用于反向标注） */
+export function swapMapOf(rows: { date: string; sourceDate: string }[]): SwapMap {
+  return new Map(rows.map((r) => [r.date, r.sourceDate]))
+}
+
 export interface Course {
   id: number
   semesterId: number
