@@ -111,6 +111,23 @@ watch(
   },
 )
 
+// ===== logo 点击动效：点击侧栏 logo 重播一次「按下回缩 → 弹性回位」=====
+// 关键帧只在 styles/themes/claude.css 声明（Claude 主题专属），其它主题挂类无任何效果。
+// 用 classList 直接操作 + 强制重排，保证连续快速点击时同名动画也能每次重播。
+const logoIconRef = ref<InstanceType<typeof AppIcon>>()
+function popLogo(): void {
+  const el = logoIconRef.value?.$el as HTMLElement | undefined
+  if (!el) return
+  el.classList.remove('logo-pop')
+  void el.offsetWidth // 强制重排，否则移除后立刻加回同名 CSS 动画不会重播
+  el.classList.add('logo-pop')
+}
+function onLogoAnimEnd(e: AnimationEvent): void {
+  if (e.animationName === 'wb-claude-logo-pop') {
+    ;(e.currentTarget as HTMLElement).classList.remove('logo-pop')
+  }
+}
+
 // ===== 通知轮询：拉取服务端待投递的浏览器通知 =====
 interface PendingNotif {
   id: number
@@ -149,7 +166,13 @@ onUnmounted(() => {
   <el-container class="layout">
     <el-aside width="200px" class="aside">
       <div class="logo">
-        <AppIcon :icon="themedIcon('logo')" :size="26" />
+        <AppIcon
+          ref="logoIconRef"
+          :icon="themedIcon('logo')"
+          :size="26"
+          @click="popLogo"
+          @animationend="onLogoAnimEnd"
+        />
         <span class="logo-text">工作台</span>
       </div>
       <el-menu
