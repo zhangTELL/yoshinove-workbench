@@ -41,6 +41,7 @@ import {
 import type { Component } from 'vue'
 import { appearance } from '../stores/appearance'
 import ClaudeMark from '../components/icons/ClaudeMark.vue'
+import ToriiMark from '../components/icons/ToriiMark.vue'
 
 /**
  * 每个主题可以有**自己的一套图标**。
@@ -53,10 +54,11 @@ import ClaudeMark from '../components/icons/ClaudeMark.vue'
  *   逻辑名 'notes' → default/macos: EP 的 Notebook（实心面）
  *                  → claude       : Lucide 的 NotebookPen（细线 + 淡暖底方片）
  *                  → paper        : 同一个 Lucide 字形（裸墨线 + 细一级笔触）
+ *                  → miko         : 同一个 Lucide 字形（朱印章底 + 白字形，见 themes/miko.css）
  *
- * Claude 与 paper **共用 Lucide 字形**，但两套主题对它的处理完全不同（见各自 themes/*.css
- * 的「图标语言」段）——真实设计系统里两套主题共用字形、各自处理很常见，真正拉开差别的是
- * 底色/笔触/形状，而不是每个字形都要不同。
+ * Claude / paper / miko **共用 Lucide 字形**，但三套主题对它的处理完全不同（见各自 themes/*.css
+ * 的「图标语言」段）——真实设计系统里多套主题共用字形、各自处理很常见，真正拉开差别的是
+ * 底色/笔触/形状，而不是每个字形都要不同。只有 miko 的 logo 是独立字形（自绘鸟居 ToriiMark）。
  *
  * 加一套主题时：想换字形就加一份映射，不想换就什么都不用做（自动回落 `default`）。
  *
@@ -116,7 +118,7 @@ const SOLID: Record<IconKey, Component> = {
   settings: Setting,
 }
 
-/** 细线一套：claude 与 paper 共用**字形**（各自的处理完全不同，见 themes/claude.css、themes/paper.css） */
+/** 细线一套：claude / paper / miko 共用**字形**（各自的处理完全不同，见 themes/*.css） */
 const LINE: Record<IconKey, Component> = {
   logo: Feather,
   dashboard: LayoutDashboard,
@@ -143,6 +145,7 @@ interface IconSet {
   default: Component
   claude?: Component
   paper?: Component
+  miko?: Component
 }
 
 const ICONS = Object.fromEntries(
@@ -153,6 +156,9 @@ const ICONS = Object.fromEntries(
       // Claude 的 logo 是它自己的星芒（官方图形，见 ClaudeMark.vue），其余走细线一套
       claude: k === 'logo' ? ClaudeMark : LINE[k],
       paper: LINE[k],
+      // 巫女·和风：logo 是自绘的鸟居（见 ToriiMark.vue），其余与 claude/paper 共用同一套细线字形，
+      // 处理方式（印章式的快捷入口、銀鼠/朱的导航配色）见 themes/miko.css 的「图标语言」段
+      miko: k === 'logo' ? ToriiMark : LINE[k],
     } satisfies IconSet,
   ]),
 ) as Record<IconKey, IconSet>

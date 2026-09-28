@@ -1,0 +1,260 @@
+/* ===== 主题预设：miko（巫女·和风）=====
+   浅色专用。设计意图（主题预设-设计方案.md §4.4）：**神社境内的静**——
+   生成り和纸底、朱色（鸟居/緋袴/印章）、藤紫点缀、墨字、明朝体标题、纹样克制（七宝纹打底 + 卡片头一道朱线）。
+
+   ★ 本主题与角色素材的关系（版权约束，见设计方案 §4.4 与 tools/miko_assets.py 文件头）：
+     本仓库是 public，**角色立绘绝不入库**。首页问候条与「今天没有课」空态引用的半身立绘
+     放在 `client/public/theme-local/miko/`（.gitignore 已排除），由 tools/miko_assets.py
+     从仓库根的 `素材/`（同样被排除）加工产出；**文件不存在时这里引用它的规则只是 404
+     静默降级**，其余观感（配色/纹样/字体/图标）完全不受影响。
+
+   配色基底是日本传统色（生成り / 象牙 / 灰桜 / 銀鼠 / 朱 / 緋 / 藤 / 松葉 / 琥珀 / 蘇芳 / 瑠璃 / 浅葱…）。
+   所有文字/图表取值都跑过 tools/palette_check.mjs 的两个口径：
+     · 文字族对 bg / surface / light-9 三处 ≥4.5:1；色块族对 surface ≥3:1；
+     · 图表 8 系列两两 RGB 距离 ≥45（最小 52），阈值色与强调色的距离 ≥45（64~198）。
+
+   本文件只声明值 + 表面规则，不碰 --el-* 的颜色映射（映射统一在 bridge.css）。 */
+
+html[data-wb-theme='miko'] {
+  /* ---- 页面底：生成り（带一点暖的米白）---- */
+  --wb-bg: #fbfaf5;
+  --wb-bg-image: none;
+
+  /* ---- 表面：卡片 = 象牙色的和纸（比底略深一档，"纸上的纸"）---- */
+  --wb-surface: #f8f4e6;
+  --wb-surface-overlay: #fcf9f0;
+
+  /* ---- 填充档：和纸的暖米灰 ---- */
+  --wb-fill: #f1ecde;
+  --wb-fill-light: #f6f2e7;
+  --wb-fill-lighter: #faf7ee;
+  --wb-fill-extra-light: #fcfaf3;
+  --wb-fill-dark: #e9e3d1;
+  --wb-fill-darker: #e1d9c3;
+  --wb-fill-blank: #fbf9f0;
+
+  /* ---- 文字：墨 + 銀鼠 ---- */
+  --wb-text: #2b2028;
+  --wb-text-regular: #4c4450;
+  --wb-text-muted: #595857;
+  --wb-text-faint: #91989f;
+  --wb-text-disabled: #bab7ae;
+
+  /* ---- 边框：灰桜（带一点灰桜色的柔和线，"芳乃的粉"从这里来）---- */
+  --wb-border-darker: #cfb6bd;
+  --wb-border-dark: #dcc7cd;
+  --wb-border: #e4d2d8;
+  --wb-border-light: #ebe0e3;
+  --wb-border-lighter: #f1eaec;
+  --wb-border-faint: #f7f2f3;
+
+  /* ---- 阴影：极轻，层次靠边框（与 Claude 同一哲学）---- */
+  --wb-shadow: 0 1px 2px rgba(43, 32, 40, 0.05), 0 8px 24px rgba(43, 32, 40, 0.05);
+  --wb-shadow-light: 0 1px 3px rgba(43, 32, 40, 0.06);
+  --wb-shadow-lighter: 0 1px 2px rgba(43, 32, 40, 0.05);
+  --wb-shadow-dark: 0 12px 32px rgba(43, 32, 40, 0.13);
+
+  /* ---- 质感：无玻璃；打底纹 = 七宝つなぎ（连续的宝珠环）----
+     用内联 SVG 平铺（无外部请求、无位图），1px 描边、28px 一格；
+     描边色 #e3d5d9 是"灰桜再灰一档"，在生成り上只到"隐约可见"——纹样克制是这套主题的底线。
+     环形线条间距 28px、宽度 1px，与 paper 的横格纹同量级，125% DPI 下无摩尔纹风险。 */
+  --wb-glass-bg: var(--wb-surface);
+  --wb-glass-border: var(--wb-border-light);
+  --wb-glass-blur: 0px;
+  --wb-glass-saturate: 100%;
+  --wb-texture: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='28' height='28' viewBox='0 0 28 28'%3E%3Cg fill='none' stroke='%23e3d5d9' stroke-width='1'%3E%3Ccircle cx='0' cy='0' r='14'/%3E%3Ccircle cx='28' cy='0' r='14'/%3E%3Ccircle cx='0' cy='28' r='14'/%3E%3Ccircle cx='28' cy='28' r='14'/%3E%3Ccircle cx='14' cy='14' r='14'/%3E%3C/g%3E%3C/svg%3E");
+  --wb-texture-size: 28px 28px;
+
+  /* ---- 字体：标题用明朝体（正文保持默认黑体栈）----
+     真名放栈首：本机装了就用（明朝体是"和风"观感的半边天），没有就落思源宋体（本机已装、OFL）。
+     ★ 正文刻意不换：明朝体/宋体在 13~14px 的成段正文上偏"虚"（paper 的教训），标题类才点它，
+       落点见下方「明朝体」段。 */
+  --wb-font-display: 'Yu Mincho', 'YuMincho', 'Noto Serif SC', 'Source Han Serif SC', 'STZhongsong',
+    'Songti SC', Georgia, serif;
+
+  /* ---- 强调色的"文字用"变体：緋压暗一档（#A64308）----
+     朱 #EB6101 当 12~13px 文字用只有 ~2.5:1；压到 #A64308 后对 bg / surface / light-9 底
+     三处都 ≥5.4（tools/palette_check.mjs 实测）。主色本身不动（按钮底/选中态/图标用）。 */
+  --wb-accent-text: #a64308;
+
+  /* ---- 图表 8 系列：日本传统色 ----
+     瑠璃 / 浅葱 / 琥珀 / 蘇芳 / 藤 / 松葉 / 珊瑚 / 鈍色。对 surface 最低对比 3.53，
+     两两 RGB 距离最小 52（瑠璃↔浅葱），≥45 的口径满足（tools/palette_check.mjs）。 */
+  --wb-chart-1: #2a5caa;
+  --wb-chart-2: #2e8b94;
+  --wb-chart-3: #b5722d;
+  --wb-chart-4: #a23b5c;
+  --wb-chart-5: #7a64b0;
+  --wb-chart-6: #4e8d62;
+  --wb-chart-7: #c6547d;
+  --wb-chart-8: #5e5c60;
+
+  /* ---- 阈值三档：色块族（松葉 / 琥珀 / 蘇芳）≥3:1；文字族压暗 ≥4.5:1 ----
+     ⚠️ danger（蘇芳 #D0453C）与强调色朱 #EB6101 是两种红——距离 71（≥45），
+        图上"低于平均分的柱"与主题强调色不会混。 */
+  --wb-chart-safe: #4a9a66;
+  --wb-chart-warn: #b47e12;
+  --wb-chart-danger: #d0453c;
+  --wb-chart-safe-text: #2f6b47;
+  --wb-chart-warn-text: #85620c;
+  --wb-chart-danger-text: #a8322b;
+
+  /* ---- 状态色：与阈值色同源（松葉绿 / 琥珀黄 / 蘇芳红），light-9 用显式浅色 ---- */
+  --wb-success: #4a9a66;
+  --wb-warning: #b47e12;
+  --wb-danger: #d0453c;
+  --wb-success-light-9: #eaf3ec;
+  --wb-warning-light-9: #f9f4e4;
+  --wb-danger-light-9: #f9ecea;
+
+  /* ---- 首页问候条：生成り向桜色过渡的和纸 ---- */
+  --wb-hero-from: #fcf4ee;
+  --wb-hero-to: #f8f4e6;
+  --wb-hero-border: #e8d4da;
+
+  /* ---- 本主题私有 ---- */
+  /* 藤紫（方案 §4.4 的 --wb-secondary；契约层没有 secondary 变量，按主题私有的方式给出）。
+     用在文字选区上——和纸上的紫裁纸刀痕；主强调色保持朱，两者不抢。 */
+  --miko-purple: #a59aca;
+}
+
+/* ==================== 明朝体：只落在「标题类」====================
+   与 claude（衬线只上标题）、paper（手写体上标题+导航）同一套点名法，不做全局覆盖。
+   导航菜单项刻意保持正文黑体——明朝体在侧栏的窄行高里笔画会发虚，且菜单是"操作"不是"标题"。 */
+html[data-wb-theme='miko'] .el-card__header,
+html[data-wb-theme='miko'] .hero-greet,
+html[data-wb-theme='miko'] .logo-text,
+html[data-wb-theme='miko'] .field-label {
+  font-family: var(--wb-font-display);
+  letter-spacing: 0.03em;
+}
+
+/* 卡片头：一道朱色竖线（鸟居/注連縄的意象，方案 §4.4 "标题带一条朱色短前缀线"）。
+   ⚠️ 用 inset box-shadow 而不是 ::before 或 border-left：EP 与业务页的卡片头内部多是
+   flex 布局（DashboardView 的 .card-head），::before 会成为 flex 项/独占一行，
+   border-left 则会把头部内容整体推 3px——inset 阴影只上色、不动布局。 */
+html[data-wb-theme='miko'] .el-card__header {
+  background: transparent;
+  border-bottom: 1px solid var(--wb-border);
+  box-shadow: inset 3px 0 0 0 var(--el-color-primary);
+}
+
+/* 输入框：和纸底 + 灰桜线（EP 默认的纯白输入框在象牙卡片上太"跳"）。
+   ⚠️ 这条规则的特异性高于 EP 的 `.el-input__wrapper.is-focus`，所以聚焦态必须重新声明一次，
+      否则聚焦时朱色的聚焦环会被这里的灰桜线压掉。 */
+html[data-wb-theme='miko'] .el-input__wrapper,
+html[data-wb-theme='miko'] .el-textarea__inner {
+  background: var(--wb-fill-blank);
+  box-shadow: 0 0 0 1px var(--wb-border) inset;
+}
+html[data-wb-theme='miko'] .el-input__wrapper.is-focus,
+html[data-wb-theme='miko'] .el-textarea__inner:focus {
+  box-shadow: 0 0 0 1px var(--el-color-primary) inset;
+}
+
+/* 文字选区：藤紫（--miko-purple 的消费点） */
+html[data-wb-theme='miko'] ::selection {
+  background: color-mix(in srgb, var(--miko-purple) 30%, transparent);
+}
+
+/* ==================== 图标语言（第四种处理：印章）====================
+   macOS = 彩色渐变 squircle、claude = 细线 + 淡暖底、paper = 裸墨线；
+   miko 的快捷入口 = **朱印**（印肉平涂的方印 + 白色字形，落款印章的观感），
+   logo = 自绘鸟居裸线（ToriiMark.vue），导航未选中 = 銀鼠、选中 = 朱。
+   覆盖必须带 html[data-wb-theme] 前缀（AppIcon 内部是 scoped 样式）；用容器限定位置。 */
+
+/* ① logo：去色块，鸟居以朱色裸线站立（同 claude/paper 的"裸字形"处理）。 */
+html[data-wb-theme='miko'] .logo .app-icon {
+  --ai-bg: none;
+  --ai-glyph: var(--el-color-primary);
+  --ai-from: unset;
+  --ai-to: unset;
+  --ai-glow: transparent;
+  box-shadow: none;
+  border-radius: 0;
+}
+html[data-wb-theme='miko'] .logo .app-icon .app-icon__glyph {
+  font-size: calc(var(--ai-size) * 0.88);
+}
+
+/* ② 快捷入口：朱印。⚠️ 必须**显式**改掉 --ai-* 全组（不能只写 background）：
+      DashboardView 在 .sc-item 上行内给了 --sc-from/--sc-to，而 AppIcon 的底色读 --ai-*，
+      只压 background 压不住变量（claude/paper 都踩过的同一个坑）。
+      底色跟 --el-color-primary 走：用户在设置里换强调色，印章跟着换印泥。 */
+html[data-wb-theme='miko'] .sc-item .app-icon {
+  --ai-bg: var(--el-color-primary);
+  --ai-glyph: #fff8f2;
+  --ai-from: unset;
+  --ai-to: unset;
+  --ai-glow: transparent;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.16), 0 1px 2px rgba(43, 32, 40, 0.18);
+  border-radius: 18%;
+}
+/* 白线字形在朱底上比深色字形显小，放大一档找补光学重量；笔画保持 Lucide 默认 2（印要实） */
+html[data-wb-theme='miko'] .sc-item .app-icon .app-icon__glyph {
+  font-size: calc(var(--ai-size) * 0.6);
+}
+
+/* ③ 侧栏未选中图标：銀鼠（--wb-text-faint）；笔画比 paper 略实一点（1.7 vs 1.6），
+      朱色选中态走默认规则，不在这里覆盖。 */
+html[data-wb-theme='miko'] .menu .el-menu-item:not(.is-active) > .el-icon,
+html[data-wb-theme='miko'] .menu .el-sub-menu__title > .el-icon {
+  color: var(--wb-text-faint);
+}
+html[data-wb-theme='miko'] .menu .el-icon svg {
+  stroke-width: 1.7;
+}
+
+/* ==================== 问候条的立绘（本地素材，缺失即静默降级）====================
+   半身立绘立在问候条右下、头顶稍稍探出卡片上缘（"站在卡纸后面"的观感）。
+   ⚠️ 位置刻意避开右侧的统计块（hero-stats 连按钮约 405px 宽，右缘距卡片右缘 ~450px），
+      锚在 right: 480px 的中段空白里；1280px 以下问候条会换行布局，直接隐藏，不做压缩适配。
+   ⚠️ url 指向 /theme-local/miko/hero-smile.webp——文件不存在（新 clone / 没跑加工脚本）时
+      这条背景 404，::after 就是空元素，什么都不画，其余观感不受影响。 */
+html[data-wb-theme='miko'] .hero {
+  position: relative;
+}
+/* 立绘垫在内容下面（hero-main / hero-stats 提到 z-index:1），遮不住任何可交互元素 */
+html[data-wb-theme='miko'] .hero-main,
+html[data-wb-theme='miko'] .hero-stats {
+  position: relative;
+  z-index: 1;
+}
+html[data-wb-theme='miko'] .hero::after {
+  content: '';
+  position: absolute;
+  right: 480px;
+  bottom: 0;
+  height: calc(100% + 22px);
+  max-height: 195px;
+  aspect-ratio: 546 / 460; /* 与加工产物 hero-smile.webp 的宽高比一致 */
+  background: url('/theme-local/miko/hero-smile.webp') right bottom / contain no-repeat;
+  pointer-events: none;
+  /* 左缘向和纸里淡出，接住"画在纸上"的观感，避免一道生硬的裁切边 */
+  -webkit-mask-image: linear-gradient(to left, #000 68%, transparent 98%);
+  mask-image: linear-gradient(to left, #000 68%, transparent 98%);
+}
+@media (max-width: 1280px) {
+  html[data-wb-theme='miko'] .hero::after {
+    display: none;
+  }
+}
+
+/* 「今天没有课」空态：眼睛发亮的那张（兴奋的语气）立在右侧。
+   同样是本地素材 404 静默降级；min-height 给立绘留出站立空间。 */
+html[data-wb-theme='miko'] .card-today .empty-block {
+  position: relative;
+  min-height: 148px;
+}
+html[data-wb-theme='miko'] .card-today .empty-block::after {
+  content: '';
+  position: absolute;
+  right: 4px;
+  bottom: 0;
+  height: 138px;
+  aspect-ratio: 329 / 400; /* 与 empty-sparkle.webp 的宽高比一致 */
+  background: url('/theme-local/miko/empty-sparkle.webp') right bottom / contain no-repeat;
+  pointer-events: none;
+  -webkit-mask-image: linear-gradient(to left, #000 72%, transparent 100%);
+  mask-image: linear-gradient(to left, #000 72%, transparent 100%);
+}

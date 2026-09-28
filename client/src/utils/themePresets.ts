@@ -62,8 +62,8 @@ export const THEME_PRESETS: ThemePreset[] = [
   {
     id: 'miko',
     name: '巫女·和风',
-    desc: '和纸 + 朱色 + 藤紫',
-    ready: false,
+    desc: '生成り和纸 + 朱色鸟居 + 藤紫，明朝体标题，七宝纹',
+    ready: true,
     accent: '#eb6101',
     radius: 2,
     colors: ['#eb6101', '#fbfaf5', '#2b2028'],

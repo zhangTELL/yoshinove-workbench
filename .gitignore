@@ -35,3 +35,10 @@ P8-*.md
 
 # ===== 课表的安卓端（独立项目，仅本地保留，不进这个仓库）=====
 /YoshinoveTimetable/
+
+# ===== 角色立绘素材（版权物，仅本地保留，绝不入库）=====
+# 本仓库是 public：不得提交任何角色立绘/截图（见 主题预设-设计方案.md §4.4 的版权约束）。
+# 「巫女·和风」主题消费的立绘由 tools/miko_assets.py 从这里加工后输出到
+# client/public/theme-local/（同样不入库）；两处都不存在时主题静默降级为纯 CSS 观感。
+/素材/
+client/public/theme-local/
