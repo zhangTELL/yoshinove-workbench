@@ -215,11 +215,29 @@ async function dispatch(channel: string, title: string, body: string, settings: 
   return 'skipped: 未知通道'
 }
 
-/** 每分钟扫描：上课提醒 + 学习通作业截止提醒/自动同步 + AI 平台余额轮询 */
-export async function scanAndRemind(): Promise<void> {
-  await scanChaoxing().catch((e) => console.error('[scheduler] chaoxing', e))
-  await scanBalance().catch((e) => console.error('[scheduler] balance', e))
+let scanning = false
 
+/**
+ * 每分钟扫描：上课提醒 + 学习通作业截止提醒/自动同步 + AI 平台余额轮询。
+ * ★ 顺序（审查修复 #6）：课堂提醒**先跑**（只读本地库，毫秒级），外部同步（学习通/余额，
+ *   串行网络请求、可能耗时数分钟）放在后面——旧顺序里慢同步会把时钟拖过目标分钟，
+ *   课堂提醒那一轮就永远错过了。
+ * ★ 重入保护：上一轮还没结束就跳过本轮（配合课堂提醒的补发窗口不会丢提醒；
+ *   认领式发送本身也是并发安全的，这里是避免无谓的重复网络请求）。
+ */
+export async function scanAndRemind(): Promise<void> {
+  if (scanning) return
+  scanning = true
+  try {
+    await checkClassReminders()
+    await scanChaoxing().catch((e) => console.error('[scheduler] chaoxing', e))
+    await scanBalance().catch((e) => console.error('[scheduler] balance', e))
+  } finally {
+    scanning = false
+  }
+}
+
+async function checkClassReminders(): Promise<void> {
   const settings = getSettings()
   const rules = (settings.rules ?? []).filter((r) => r.enabled && r.minutesBefore > 0)
   if (!rules.length) return
@@ -264,7 +282,13 @@ export async function scanAndRemind(): Promise<void> {
 
     for (const rule of rules) {
       const targetMin = startMin - rule.minutesBefore
-      if (nowMin !== targetMin) continue
+      // 触发窗口 [target, min(target+10, 开课))（审查修复 #6）：
+      // 原来「nowMin 与 targetMin 完全相等」——外部同步（学习通/余额是串行网络请求）把
+      // 扫描拖过目标分钟后，这一分钟就永远错过、提醒静默丢失。改成窗口后，
+      // 下一轮只要还在窗口内就补发；dedupe_key 稳定（含排课/提前量/日期/节次时间），
+      // 迟到的补发不会变成第二条。窗口上限 10 分钟是"有限补发"：既覆盖现实的慢同步，
+      // 也不会把"提前 2 小时"的规则在开课后还补一嗓子，更不会在开课之后才响。
+      if (nowMin < targetMin || nowMin >= Math.min(targetMin + 10, startMin)) continue
 
       const vars: Record<string, string> = {
         课程: course.name,
