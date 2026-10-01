@@ -35,12 +35,35 @@ const currentId = ref<number | null>(null)
 const title = ref('')
 const courseTag = ref('')
 const category = ref('')
-const dirty = ref(false)
 const saving = ref(false)
+
+/* ===== 脏状态：完整字段快照对比（2026-10-01 审查修复 #4 + #7）=====
+   原来是一个由编辑器 input 事件手拨的布尔：① 只有正文输入会置脏，改标题/课程标签/分类
+   保存按钮纹丝不动（#7）；② 保存响应到达时无条件清脏，保存期间继续输入的新内容被
+   误标"已保存"（#4）。现在 dirty = 当前全字段快照 ≠ 已保存快照：
+   · 标题/标签/分类是响应式 ref，改动直接进对比；
+   · Vditor 的内容读不到响应式，用 contentVersion 计数器驱动 computed 重算；
+   · 保存成功后基准 = **当时提交的那份 payload**——保存期间再输入，当前快照 ≠ 基准，仍是脏。 */
+const contentVersion = ref(0)
+const savedSnap = ref<{ title: string; content: string; courseTag: string; category: string } | null>(null)
+
+function takeSnap() {
+  return {
+    title: title.value,
+    content: vditor.value?.getValue() ?? '',
+    courseTag: courseTag.value,
+    category: category.value,
+  }
+}
+
+const dirty = computed(() => {
+  if (currentId.value === null || !savedSnap.value) return false
+  void contentVersion.value
+  return JSON.stringify(takeSnap()) !== JSON.stringify(savedSnap.value)
+})
 
 const vditor = ref<Vditor | null>(null)
 const editorEl = ref<HTMLDivElement>()
-let suppressDirty = false
 
 // ===== 主题 =====
 interface ThemeItem {
@@ -74,7 +97,7 @@ onMounted(async () => {
       void loadInitial()
     },
     input: () => {
-      if (!suppressDirty) dirty.value = true
+      contentVersion.value++
       setWriteId()
     },
     toolbar: [
@@ -268,14 +291,12 @@ async function openNote(n: NoteMeta) {
   if (dirty.value && !(await confirmSave())) return
   const full = await get<NoteFull>(`/api/notes/${n.id}`)
   if (!full) return
-  suppressDirty = true
   currentId.value = full.id
   title.value = full.title
   courseTag.value = full.courseTag
   category.value = full.category
   vditor.value?.setValue(full.content)
-  dirty.value = false
-  setTimeout(() => (suppressDirty = false), 50)
+  savedSnap.value = takeSnap()
 }
 
 async function confirmSave(): Promise<boolean> {
@@ -285,7 +306,7 @@ async function confirmSave(): Promise<boolean> {
       cancelButtonText: '留在这',
       type: 'warning',
     })
-    dirty.value = false
+    savedSnap.value = takeSnap() // 「不保存离开」= 放弃差异，调用的两处随后都会重置基准
     return true
   } catch {
     return false
@@ -303,25 +324,26 @@ async function createNote() {
   currentId.value = r.id
   title.value = '未命名笔记'
   courseTag.value = courseTag.value
-  suppressDirty = true
   vditor.value?.setValue('')
-  dirty.value = false
-  setTimeout(() => (suppressDirty = false), 50)
+  savedSnap.value = takeSnap()
   await loadList()
   ElMessage.success('已创建，开始编辑吧')
 }
 
 async function saveNote() {
   if (currentId.value === null) return
+  // 快照"提交时的内容"作为基准（审查修复 #4）：请求期间继续输入的话，
+  // 当前草稿 ≠ 这份基准 → dirty 保持 true，不会被误标"已保存"
+  const payload = {
+    title: title.value,
+    content: vditor.value?.getValue() ?? '',
+    courseTag: courseTag.value,
+    category: category.value,
+  }
   saving.value = true
   try {
-    await put(`/api/notes/${currentId.value}`, {
-      title: title.value,
-      content: vditor.value?.getValue() ?? '',
-      courseTag: courseTag.value,
-      category: category.value,
-    })
-    dirty.value = false
+    await put(`/api/notes/${currentId.value}`, payload)
+    savedSnap.value = payload
     await loadList()
     ElMessage.success('已保存')
   } finally {
@@ -335,7 +357,7 @@ async function removeNote() {
   await del(`/api/notes/${currentId.value}`)
   currentId.value = null
   title.value = ''
-  suppressDirty = true
+  savedSnap.value = null
   vditor.value?.setValue('')
   await loadList()
   ElMessage.success('已删除')
