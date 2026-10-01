@@ -6,6 +6,7 @@ import { Delete, Plus } from '@element-plus/icons-vue'
 import Vditor from 'vditor'
 import 'vditor/dist/index.css'
 import { del, get, post, put } from '../api/http'
+import { escapeHtml } from '../utils/escapeHtml'
 
 interface NoteMeta {
   id: number
@@ -198,18 +199,22 @@ function setWriteId() {
   if (el) el.setAttribute('id', 'write')
 }
 
-/** 用 Typora 主题渲染笔记 HTML（iframe 预览与导出共用） */
+/** 用 Typora 主题渲染笔记 HTML（iframe 预览与导出共用）。
+ *  ⚠️ 标题是用户输入，进 HTML 模板前必须 escapeHtml（2026-10-01 审查修复 #2）：
+ *     原样拼接时 `<svg onload=…>` 形态的标题能在预览 iframe 里执行脚本、摸到父页面。
+ *     正文走 vditor.getHTML()（自带 XSS 清洗），标题这条路是我们自己拼的、只有自己能堵。 */
 function buildThemedHtml(): string {
   const html = vditor.value?.getHTML() ?? ''
-  const cssLink = themeName.value ? `<link rel="stylesheet" href="/themes/${themeName.value}">` : ''
+  const cssLink = themeName.value ? `<link rel="stylesheet" href="/themes/${encodeURIComponent(themeName.value)}">` : ''
+  const safeTitle = escapeHtml(title.value)
   return `<!doctype html>
-<html lang="zh-CN"><head><meta charset="utf-8"><title>${title.value}</title>
+<html lang="zh-CN"><head><meta charset="utf-8"><title>${safeTitle}</title>
 ${cssLink}
 <style>
   body { margin: 0 auto; max-width: 820px; padding: 24px 32px; }
   #write { min-height: 60vh; }
 </style></head><body>
-<div id="write"><h1>${title.value}</h1>
+<div id="write"><h1>${safeTitle}</h1>
 ${html}
 </div>
 </body></html>`
@@ -220,7 +225,9 @@ function openPreview() {
   previewVisible.value = true
 }
 
-/** 导出 PDF：按主题渲染后调起打印 */
+/** 导出 PDF：按主题渲染后调起打印。
+ *  标题已在 buildThemedHtml 里转义；打印窗口里唯一的脚本是下面这段我们自己的
+ *  window.print() 触发器，正文经 vditor 的 XSS 清洗，不再引入其它可执行内容。 */
 function exportPdf() {
   if (currentId.value === null) return
   const themed = buildThemedHtml()
@@ -481,8 +488,12 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
 
     <!-- 主题预览 -->
     <el-dialog v-model="previewVisible" :title="`预览：${title || '未命名'}（${themeName || '默认样式'}）`" width="80%" top="3vh" destroy-on-close>
+      <!-- ★ sandbox 不给 allow-same-origin（审查修复 #2）：预览内容是用户 HTML，
+           无同源权限时即使出现注入脚本也摸不到父页面与本地 API。
+           预览里没有需要执行的脚本（<link> 样式表照常加载），所以是全锁的空 sandbox。 -->
       <iframe
         :srcdoc="previewHtml"
+        sandbox=""
         style="width: 100%; height: 76vh; border: 1px solid var(--el-border-color); border-radius: var(--wb-radius-card); background: var(--el-bg-color)"
       />
     </el-dialog>
