@@ -460,9 +460,34 @@ async function openPreview() {
 
 // ==================== 打开 / 保存 ====================
 
+/** 打开序号：只接受最后一次有效打开请求的结果（审查修复 #3）。
+ *  快速连点两个文件时，先点的那次响应可能后到——不校验序号就会用旧结果覆盖新打开的文件。 */
+let openSeq = 0
+
+/** 切换文件前的未保存确认：保存 / 放弃 / 取消（审查修复 #3）。
+ *  原来的 openFile 不看 dirty 直接替换草稿，编辑 A 后点 B，A 的修改被无声丢掉。 */
+async function confirmBeforeSwitch(): Promise<boolean> {
+  if (!dirty.value || !current.value) return true
+  try {
+    await ElMessageBox.confirm(`「${current.value.rel}」有未保存的修改，切换前要保存吗？`, '未保存的修改', {
+      distinguishCancelAndClose: true,
+      confirmButtonText: '保存并切换',
+      cancelButtonText: '放弃修改',
+      type: 'warning',
+    })
+    // 「保存并切换」：保存失败（网络/校验）就不能切，否则改动无声丢失
+    return await save()
+  } catch (action) {
+    return action === 'cancel' // cancelButtonText = 放弃修改 → 放行；Esc / × = 取消
+  }
+}
+
 async function openFile(rel: string) {
+  if (!(await confirmBeforeSwitch())) return
+  const seq = ++openSeq
   try {
     const f = await get<FileContent>(`/api/projects/${props.project.id}/file?path=${encodeURIComponent(rel)}`)
+    if (seq !== openSeq) return // 过期响应：已有更新的打开请求
     current.value = f
     draft.value = f.content ?? ''
     // 能预览的类型默认给预览（看效果更常见），代码默认给编辑
@@ -473,8 +498,9 @@ async function openFile(rel: string) {
   }
 }
 
-async function save() {
-  if (!current.value || !dirty.value || saving.value) return
+/** 返回是否保存成功（供「切换前保存」判断；模板的保存按钮也用，返回值无害） */
+async function save(): Promise<boolean> {
+  if (!current.value || !dirty.value || saving.value) return !dirty.value && !saving.value
   saving.value = true
   try {
     const r = await put<{ backup: string; size: number; mtime: string }>(`/api/projects/${props.project.id}/file`, {
@@ -484,8 +510,10 @@ async function save() {
     current.value = { ...current.value, content: draft.value, size: r.size, mtime: r.mtime }
     ElMessage.success(`已保存（旧内容备份为 ${r.backup}）`)
     if (mode.value === 'preview' && current.value.preview === 'markdown') await renderMarkdown()
+    return true
   } catch (e) {
     ElMessage.error((e as Error).message)
+    return false
   } finally {
     saving.value = false
   }
