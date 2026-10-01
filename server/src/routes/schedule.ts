@@ -16,6 +16,21 @@ function colorFor(name: string): string {
   return PALETTE[h % PALETTE.length]
 }
 
+/** 一条排课的「身份串」（审查修复 #9 的判重口径）：课程 + 星期 + 起止节次 + 周次集合 + 单双周 + 教室。
+ *  周次按去重排序后的集合比较（[1,2] 与 [2,1] 是同一条），缺省值与插入路径对齐。 */
+function sessionIdentity(
+  courseId: number,
+  weekday: number,
+  startSection: number,
+  endSection: number,
+  weeks: number[],
+  weekParity: string | null | undefined,
+  room: string | null | undefined,
+): string {
+  const weeksKey = [...new Set(weeks)].sort((a, b) => a - b).join(',')
+  return `${courseId}|${weekday}|${startSection}|${endSection}|${weeksKey}|${weekParity ?? 'all'}|${room ?? ''}`
+}
+
 export const scheduleRoutes: FastifyPluginAsync = async (app) => {
   // 完整课表：课程 + 排课 + 调休例外
   app.get('/api/schedule', async (req) => {
@@ -180,7 +195,10 @@ export const scheduleRoutes: FastifyPluginAsync = async (app) => {
     }
   })
 
-  // 导入解析结果：按课程名去重建课程，写入排课
+  // 导入解析结果：按课程名去重建课程，写入排课。
+  // ★ 排课身份判重（审查修复 #9）：同一课程下「星期+起止节次+周次(集合)+单双周+教室」
+  //   完全一致的排课视为同一条，跳过不插——同一份 PDF 追加导入两次不再产生重复排课
+  //   （课程本身本来就按名字幂等，重复的是排课行）。返回里带 sessionsSkipped 供界面提示。
   app.post('/api/schedule/import', async (req) => {
     const body = req.body as { semesterId: number; cells: CourseCellInput[]; replace?: boolean }
     if (!body?.semesterId || !Array.isArray(body.cells)) {
@@ -193,7 +211,13 @@ export const scheduleRoutes: FastifyPluginAsync = async (app) => {
       }
       const existing = db.select().from(courses).where(eq(courses.semesterId, sid)).all()
       const byName = new Map(existing.map((c) => [c.name, c]))
+      // 已有排课的身份集合（weekParity/room 缺省值与插入路径一致）
+      const seen = new Set<string>()
+      for (const s of db.select().from(courseSessions).where(eq(courseSessions.semesterId, sid)).all()) {
+        seen.add(sessionIdentity(s.courseId, s.weekday, s.startSection, s.endSection, JSON.parse(s.weeks), s.weekParity, s.room))
+      }
       let added = 0
+      let skipped = 0
       for (const cell of body.cells) {
         let course = byName.get(cell.name)
         if (!course) {
@@ -216,6 +240,20 @@ export const scheduleRoutes: FastifyPluginAsync = async (app) => {
           db.update(courses).set({ teacher: cell.teacher }).where(eq(courses.id, course.id)).run()
           course = { ...course, teacher: cell.teacher }
         }
+        const identity = sessionIdentity(
+          course.id,
+          cell.weekday,
+          cell.startSection,
+          cell.endSection,
+          cell.weeks ?? [],
+          cell.weekParity,
+          cell.room,
+        )
+        if (seen.has(identity)) {
+          skipped++
+          continue
+        }
+        seen.add(identity)
         db.insert(courseSessions)
           .values({
             courseId: course.id,
@@ -230,7 +268,7 @@ export const scheduleRoutes: FastifyPluginAsync = async (app) => {
           })
           .run()
       }
-      return { coursesTotal: byName.size, coursesAdded: added, sessionsAdded: body.cells.length }
+      return { coursesTotal: byName.size, coursesAdded: added, sessionsAdded: body.cells.length - skipped, sessionsSkipped: skipped }
     })()
     return result
   })
