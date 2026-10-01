@@ -1,4 +1,4 @@
-import { desc, eq, inArray } from 'drizzle-orm'
+import { and, asc, desc, eq, inArray } from 'drizzle-orm'
 import type { FastifyPluginAsync } from 'fastify'
 import { db, sqlite } from '../db/index.js'
 import { notificationLog } from '../db/schema.js'
@@ -15,16 +15,18 @@ function getSetting<T>(key: string, fallback: T): T {
 }
 
 export const notificationRoutes: FastifyPluginAsync = async (app) => {
-  // 前端轮询：取待投递的浏览器通知
+  // 前端轮询：取待投递的浏览器通知。
+  // ★ 通道与状态过滤必须进 SQL（审查修复 #8）：原来是"取最新 20 条 browser 记录、
+  //   再在内存里挑 pending"——积压的旧 pending 会被 20 条更新的 delivered 挤出窗口，
+  //   永远投不出去。现在 WHERE 过滤 → 最早优先 → 再限量。
   app.get('/api/notifications/pending', async () => {
-    const rows = db
+    return db
       .select()
       .from(notificationLog)
-      .where(eq(notificationLog.channel, 'browser'))
-      .orderBy(desc(notificationLog.id))
+      .where(and(eq(notificationLog.channel, 'browser'), eq(notificationLog.status, 'pending')))
+      .orderBy(asc(notificationLog.id))
       .limit(20)
       .all()
-    return rows.filter((r) => r.status === 'pending')
   })
 
   app.post('/api/notifications/mark-delivered', async (req) => {
