@@ -273,8 +273,12 @@ export function ensureSchema() {
   const hasColumn = sqlite.prepare("SELECT 1 FROM pragma_table_info('notification_log') WHERE name = 'dedupe_key'").get()
   if (!hasColumn) {
     sqlite.exec(`ALTER TABLE notification_log ADD COLUMN dedupe_key TEXT`)
-    sqlite.exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_notif_dedupe ON notification_log(dedupe_key) WHERE dedupe_key IS NOT NULL`)
   }
+  /* ★ 去重键唯一性 = (dedupe_key, channel)（2026-10-01 审查修复 #5）。
+     原来是 dedupe_key 单列唯一：同一个事件推 pushplus + browser 两个通道时，
+     第二个通道的记录被唯一索引吞掉 → 浏览器通知永远收不到。
+     老库上是单列唯一索引，重建为复合索引；已有的历史行不需要迁移（只影响以后写入）。 */
+  migrateNotifDedupeIndex()
 
   // 学习通作业补 course_start：用来区分「本学期」与往期课程。老行为 NULL，下次同步会回填（见 upsertWorks）
   addColumn('chaoxing_homework', 'course_start', 'TEXT')
@@ -310,6 +314,24 @@ interface HomeworkRow {
   work_key: string | null
   synced_at: string
   reminded_at: string | null
+}
+
+/** notification_log 的去重索引迁移：单列 (dedupe_key) → 复合 (dedupe_key, channel)。幂等 */
+function migrateNotifDedupeIndex(): void {
+  const createComposite = `CREATE UNIQUE INDEX IF NOT EXISTS idx_notif_dedupe ON notification_log(dedupe_key, channel) WHERE dedupe_key IS NOT NULL`
+  const idx = sqlite
+    .prepare(`SELECT sql FROM sqlite_master WHERE type = 'index' AND name = 'idx_notif_dedupe'`)
+    .get() as { sql: string } | undefined
+  if (!idx) {
+    sqlite.exec(createComposite)
+    return
+  }
+  // 老索引还在且只有 dedupe_key 一列 → 删掉重建为复合
+  const cols = sqlite.prepare(`PRAGMA index_info('idx_notif_dedupe')`).all() as { name: string }[]
+  if (cols.length === 1 && cols[0].name === 'dedupe_key') {
+    sqlite.exec(`DROP INDEX idx_notif_dedupe`)
+    sqlite.exec(createComposite)
+  }
 }
 
 /**

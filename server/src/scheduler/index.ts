@@ -75,10 +75,7 @@ async function scanChaoxing(): Promise<void> {
       const left = mins >= 1440 ? `${mins / 1440} 天` : mins >= 60 ? `${mins / 60} 小时` : `${mins} 分钟`
       const body = `作业提醒：${hw.courseName}《${hw.title}》将在 ${left}后截止（${hw.deadline}）`
       const dedupeKey = `hw-${hw.id}-${mins}`
-      for (const channel of channels) {
-        const status = await dispatch(channel, '作业截止提醒', body, settings)
-        insertNotification(channel, 'chaoxing', '作业截止提醒', body, status, dedupeKey)
-      }
+      await emitNotification(channels, 'chaoxing', '作业截止提醒', body, dedupeKey, settings)
     }
   }
 }
@@ -129,10 +126,7 @@ async function scanBalance(): Promise<void> {
     const body = `${hit.name} 余额仅剩 ${hit.available} ${hit.currency}（阈值 ${hit.threshold}），记得充值`
     // 同一配置同一天只提醒一次
     const dedupeKey = `bal-${hit.profileId}-${hit.threshold}-${dateKey}`
-    for (const channel of channels) {
-      const status = await dispatch(channel, 'API 余额不足', body, settings)
-      insertNotification(channel, 'balance', 'API 余额不足', body, status, dedupeKey)
-    }
+    await emitNotification(channels, 'balance', 'API 余额不足', body, dedupeKey, settings)
   }
 }
 
@@ -141,17 +135,61 @@ function weekParityMatch(parity: WeekParity, week: number): boolean {  if (parit
   return true
 }
 
-/** 写入通知记录；dedupe_key 冲突说明已发过，返回 false */
-function insertNotification(channel: string, type: string, title: string, body: string, status: string, dedupeKey: string | null): boolean {
+/* ===== 认领式发送（2026-10-01 审查修复 #5）=====
+   旧顺序是「先 dispatch 发送、后 insert 记账」，有两个洞：
+     ① 记账前崩溃 / 并发扫描 → 同一条事件重复推送（去重只拦得住记账，拦不住已发出去的）；
+     ② unique(dedupe_key) 不带通道 → pushplus 先写占坑，browser 的记录被唯一索引吞掉，
+        桌面通知永远收不到。
+   新顺序：**先 INSERT 占坑（unique(dedupe_key, channel) 的写入就是原子认领），再发送**。
+   失败策略（明确）：发送失败把状态记成 failed:…，**不自动重试**——避免坏凭据每分钟刷屏；
+   卡在 'sending' 超过 5 分钟的僵尸认领（进程在认领与发送之间崩溃）由 reclaimStaleClaims
+   释放，这是唯一的重试路径。 */
+function reclaimStaleClaims(): void {
   try {
     sqlite
       .prepare(
-        'INSERT INTO notification_log (channel, type, title, body, status, sent_at, dedupe_key) VALUES (?, ?, ?, ?, ?, datetime(\'now\', \'localtime\'), ?)',
+        "DELETE FROM notification_log WHERE status = 'sending' AND sent_at < datetime('now', 'localtime', '-5 minutes')",
       )
-      .run(channel, type, title, body, status, dedupeKey)
-    return true
+      .run()
   } catch {
-    return false // 唯一索引冲突 = 已发送过
+    /* 空库等场景忽略 */
+  }
+}
+
+async function emitNotification(
+  channels: string[],
+  type: string,
+  title: string,
+  body: string,
+  dedupeKey: string | null,
+  settings: NotifSettings,
+): Promise<void> {
+  reclaimStaleClaims()
+  for (const channel of channels) {
+    if (dedupeKey) {
+      try {
+        sqlite
+          .prepare(
+            "INSERT INTO notification_log (channel, type, title, body, status, sent_at, dedupe_key) VALUES (?, ?, ?, ?, 'sending', datetime('now', 'localtime'), ?)",
+          )
+          .run(channel, type, title, body, dedupeKey)
+      } catch {
+        continue // 唯一索引冲突 = 该事件该通道已认领/已发送
+      }
+    }
+    const status = await dispatch(channel, title, body, settings)
+    if (dedupeKey) {
+      sqlite
+        .prepare('UPDATE notification_log SET status = ? WHERE channel = ? AND dedupe_key = ?')
+        .run(status, channel, dedupeKey)
+    } else {
+      // 无去重键的事件：退回直接落一条（当前所有调用方都带键，这条只是兜底）
+      sqlite
+        .prepare(
+          "INSERT INTO notification_log (channel, type, title, body, status, sent_at) VALUES (?, ?, ?, ?, ?, datetime('now', 'localtime'))",
+        )
+        .run(channel, type, title, body, status)
+    }
   }
 }
 
@@ -239,11 +277,7 @@ export async function scanAndRemind(): Promise<void> {
       const title = '上课提醒'
       const dateKey = `${today.getFullYear()}${String(today.getMonth() + 1).padStart(2, '0')}${String(today.getDate()).padStart(2, '0')}`
       const dedupeKey = `class-${s.id}-${rule.minutesBefore}-${dateKey}-${section.start}`
-
-      for (const channel of rule.channels ?? []) {
-        const status = await dispatch(channel, title, body, settings)
-        insertNotification(channel, 'class', title, body, status, dedupeKey)
-      }
+      await emitNotification(rule.channels ?? [], 'class', title, body, dedupeKey, settings)
     }
   }
 }
