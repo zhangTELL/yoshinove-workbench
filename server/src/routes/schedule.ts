@@ -31,6 +31,31 @@ function sessionIdentity(
   return `${courseId}|${weekday}|${startSection}|${endSection}|${weeksKey}|${weekParity ?? 'all'}|${room ?? ''}`
 }
 
+/** 排课字段的运行时校验（审查修复 #10）：TS 类型断言对运行时 JSON 无效，
+ *  之前 weekday=99、startSection=0、endSection=-2、weeks=[999] 都能 200 入库。
+ *  上限取自所属学期：节次上限 = 作息表长度，周次上限 = 学期周数。
+ *  失败抛 400（Fastify 会把 statusCode 带出去），调用方都在事务/写入之前调用，坏数据不落库。 */
+function validateSessionFields(
+  v: { weekday: unknown; startSection: unknown; endSection: unknown; weeks: unknown; weekParity: unknown },
+  limits: { maxSections: number; maxWeeks: number },
+): void {
+  const bad = (msg: string): Error => Object.assign(new Error(msg), { statusCode: 400 })
+  const int = (x: unknown): x is number => Number.isInteger(x)
+  if (!int(v.weekday) || v.weekday < 1 || v.weekday > 7) throw bad('星期必须是 1-7 的整数')
+  if (!int(v.startSection) || v.startSection < 1 || v.startSection > limits.maxSections)
+    throw bad(`起始节次必须是 1-${limits.maxSections} 的整数`)
+  if (!int(v.endSection) || v.endSection < v.startSection || v.endSection > limits.maxSections)
+    throw bad(`结束节次必须是 ${v.startSection}-${limits.maxSections} 的整数（且不小于起始节次）`)
+  if (
+    !Array.isArray(v.weeks) ||
+    !v.weeks.length ||
+    !v.weeks.every((w) => int(w) && w >= 1 && w <= limits.maxWeeks)
+  )
+    throw bad(`周次必须是非空的 1-${limits.maxWeeks} 整数数组`)
+  if (v.weekParity !== 'all' && v.weekParity !== 'odd' && v.weekParity !== 'even')
+    throw bad('单双周必须是 all / odd / even')
+}
+
 export const scheduleRoutes: FastifyPluginAsync = async (app) => {
   // 完整课表：课程 + 排课 + 调休例外
   app.get('/api/schedule', async (req) => {
@@ -206,6 +231,10 @@ export const scheduleRoutes: FastifyPluginAsync = async (app) => {
     }
     const sid = body.semesterId
     const result = sqlite.transaction(() => {
+      const sem = db.select().from(semesters).where(eq(semesters.id, sid)).get()
+      if (!sem) throw Object.assign(new Error('学期不存在'), { statusCode: 400 })
+      // 每条排课的运行时校验（审查修复 #10）：上限来自该学期的作息表与周数
+      const limits = { maxSections: (JSON.parse(sem.sectionTimes) as unknown[]).length, maxWeeks: sem.totalWeeks }
       if (body.replace) {
         sqlite.prepare('DELETE FROM courses WHERE semester_id = ?').run(sid)
       }
@@ -240,6 +269,10 @@ export const scheduleRoutes: FastifyPluginAsync = async (app) => {
           db.update(courses).set({ teacher: cell.teacher }).where(eq(courses.id, course.id)).run()
           course = { ...course, teacher: cell.teacher }
         }
+        validateSessionFields(
+          { weekday: cell.weekday, startSection: cell.startSection, endSection: cell.endSection, weeks: cell.weeks ?? [], weekParity: cell.weekParity },
+          limits,
+        )
         const identity = sessionIdentity(
           course.id,
           cell.weekday,
@@ -273,10 +306,26 @@ export const scheduleRoutes: FastifyPluginAsync = async (app) => {
     return result
   })
 
-  // 手动编辑排课
+  // 手动编辑排课。先与现值合并再整体校验（审查修复 #10）——
+  // 局部更新时 endSection >= startSection 这类跨字段约束只有对着合并结果才判得准
   app.put('/api/schedule/session/:id', async (req) => {
     const { id } = req.params as { id: string }
     const b = req.body as Partial<CourseCellInput>
+    const row = db.select().from(courseSessions).where(eq(courseSessions.id, Number(id))).get()
+    if (!row) return null
+    const sem = db.select().from(semesters).where(eq(semesters.id, row.semesterId)).get()
+    if (sem) {
+      validateSessionFields(
+        {
+          weekday: b.weekday ?? row.weekday,
+          startSection: b.startSection ?? row.startSection,
+          endSection: b.endSection ?? row.endSection,
+          weeks: b.weeks ?? (JSON.parse(row.weeks) as number[]),
+          weekParity: b.weekParity ?? row.weekParity,
+        },
+        { maxSections: (JSON.parse(sem.sectionTimes) as unknown[]).length, maxWeeks: sem.totalWeeks },
+      )
+    }
     const patch: Record<string, unknown> = {}
     if (b.weekday !== undefined) patch.weekday = b.weekday
     if (b.startSection !== undefined) patch.startSection = b.startSection
@@ -285,12 +334,22 @@ export const scheduleRoutes: FastifyPluginAsync = async (app) => {
     if (b.weekParity !== undefined) patch.weekParity = b.weekParity
     if (b.room !== undefined) patch.room = b.room
     db.update(courseSessions).set(patch).where(eq(courseSessions.id, Number(id))).run()
-    const row = db.select().from(courseSessions).where(eq(courseSessions.id, Number(id))).get()
-    return row ? { ...row, weeks: JSON.parse(row.weeks) } : null
+    const updated = db.select().from(courseSessions).where(eq(courseSessions.id, Number(id))).get()
+    return updated ? { ...updated, weeks: JSON.parse(updated.weeks) } : null
   })
 
   app.post('/api/schedule/session', async (req) => {
     const b = req.body as CourseCellInput & { courseId: number; semesterId: number }
+    const sem = db.select().from(semesters).where(eq(semesters.id, Number(b.semesterId))).get()
+    if (!sem) throw Object.assign(new Error('学期不存在'), { statusCode: 400 })
+    // 课程学期归属校验（审查修复 #10）：排课必须挂在「该学期自己的」课程上
+    const course = db.select().from(courses).where(eq(courses.id, Number(b.courseId))).get()
+    if (!course || course.semesterId !== sem.id)
+      throw Object.assign(new Error('课程不存在或不属于该学期'), { statusCode: 400 })
+    validateSessionFields(b, {
+      maxSections: (JSON.parse(sem.sectionTimes) as unknown[]).length,
+      maxWeeks: sem.totalWeeks,
+    })
     const res = db
       .insert(courseSessions)
       .values({
