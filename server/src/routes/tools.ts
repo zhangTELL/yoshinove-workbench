@@ -289,6 +289,15 @@ export const toolRoutes: FastifyPluginAsync = async (app) => {
   })
 
   // ===== 番茄钟 =====
+  /* ★ 日期口径（审查修复 #11）：started_at 存的是前端 toISOString() 的 **UTC** 时间戳，
+     直接 slice(0,10) 取的是 UTC 日期——Asia/Shanghai 早上 8 点前的记录会被算到昨天。
+     必须先解析成时刻、再用与分桶相同的本地口径格式化。历史数据里非标准时间戳
+     （理论上没有，防御性兜底）退回截取。 */
+  const dayKeyOf = (startedAt: string): string => {
+    const t = new Date(startedAt)
+    return Number.isNaN(t.getTime()) ? startedAt.slice(0, 10) : fmtDate(t)
+  }
+
   app.get('/api/pomodoro', async (req) => {
     const { days } = req.query as { days?: string }
     const n = Math.min(Number(days) || 30, 365)
@@ -302,11 +311,11 @@ export const toolRoutes: FastifyPluginAsync = async (app) => {
       daily.set(fmtDate(d), 0)
     }
     for (const r of rows) {
-      const day = r.startedAt.slice(0, 10)
+      const day = dayKeyOf(r.startedAt)
       if (daily.has(day)) daily.set(day, (daily.get(day) ?? 0) + r.durationMin)
     }
     const todayStr = fmtDate(today)
-    const todayMin = rows.filter((r) => r.startedAt.slice(0, 10) === todayStr).reduce((s, r) => s + r.durationMin, 0)
+    const todayMin = rows.filter((r) => dayKeyOf(r.startedAt) === todayStr).reduce((s, r) => s + r.durationMin, 0)
     return {
       todayMin,
       daily: [...daily.entries()].map(([date, minutes]) => ({ date, minutes })).reverse(),
