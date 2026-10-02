@@ -19,6 +19,7 @@ import { del, get, post, put } from '../api/http'
 import { chartPalette, chartSeries as chartSeriesColors } from '../utils/chartTheme'
 import { wrapPreviewDoc } from '../utils/previewDoc'
 import { useUnsavedChanges } from '../composables/useUnsavedChanges'
+import { useCompactLayout } from '../composables/useCompactLayout'
 
 // ==================== 板块切换（由左侧主导航的折叠分组驱动）====================
 const route = useRoute()
@@ -713,6 +714,9 @@ const promptList = ref<PromptRecord[]>([])
 const curPromptId = ref(0)
 const promptForm = ref({ name: '', content: '', cases: [] as { input: string; expected: string }[] })
 const promptSearch = ref('')
+const promptPageEl = ref<HTMLElement>()
+const promptCompact = useCompactLayout(promptPageEl, 980)
+const promptListVisible = ref(false)
 const promptSaving = ref(false)
 const promptSaveError = ref('')
 const promptSnapshot = ref(JSON.stringify(promptForm.value))
@@ -752,6 +756,7 @@ function resetPrompt(p?: PromptRecord) {
   } : { name: '', content: '', cases: [] }
   promptSnapshot.value = JSON.stringify(promptForm.value)
   promptSaveError.value = ''
+  if (promptCompact.value) promptListVisible.value = false
 }
 
 async function selectPrompt(p: PromptRecord) {
@@ -1220,9 +1225,14 @@ function onThemeChange() {
     </div>
 
     <!-- ==================== Prompt 库 ==================== -->
-    <div v-show="activeTab === 'prompts'" class="tab-block">
+    <div ref="promptPageEl" v-show="activeTab === 'prompts'" class="tab-block prompt-block" :class="{ compact: promptCompact }">
+      <div v-if="promptCompact" class="prompt-list-toggle">
+        <el-button :aria-expanded="promptListVisible" @click="promptListVisible = !promptListVisible">{{ promptListVisible ? '收起提示词列表' : '展开提示词列表' }}</el-button>
+        <el-button :icon="Plus" @click="newPrompt">新建提示词</el-button>
+      </div>
       <div class="prompt-layout">
-        <aside class="pl-list">
+        <button v-if="promptCompact && promptListVisible" class="prompt-backdrop" aria-label="关闭提示词列表" @click="promptListVisible = false" />
+        <aside v-show="!promptCompact || promptListVisible" class="pl-list">
           <div class="pl-head">
             <el-input v-model="promptSearch" size="small" placeholder="搜索提示词" clearable />
             <el-button size="small" type="primary" :icon="Plus" @click="newPrompt">新建</el-button>
@@ -1243,10 +1253,15 @@ function onThemeChange() {
         </aside>
 
         <section class="pl-editor">
+          <div class="pl-editor-head">
+            <el-input v-model="promptForm.name" class="prompt-name-input" placeholder="如：SVG 图标生成器" aria-label="提示词名称" />
+          <div class="editor-actions">
+            <span role="status" :title="promptSaveError">{{ promptSaving ? '正在保存…' : promptSaveError ? '保存失败，可重试' : promptDirty ? '有未保存修改' : '已保存' }}</span>
+            <el-button type="primary" :loading="promptSaving" :disabled="!promptDirty" @click="savePrompt">{{ promptSaveError ? '重试保存' : '保存' }}</el-button>
+            <el-button type="danger" plain :disabled="promptSaving" @click="removePrompt">删除</el-button>
+          </div>
+          </div>
           <el-form label-width="70px">
-            <el-form-item label="名称">
-              <el-input v-model="promptForm.name" placeholder="如：SVG 图标生成器" />
-            </el-form-item>
             <el-form-item label="提示词">
               <el-input
                 v-model="promptForm.content"
@@ -1277,11 +1292,7 @@ function onThemeChange() {
           </div>
           <el-empty v-if="!promptForm.cases.length" description="没有用例，模型对比时可临时填写" :image-size="60" />
 
-          <div class="editor-actions">
-            <span role="status" :title="promptSaveError">{{ promptSaving ? '正在保存…' : promptSaveError ? '保存失败，可重试' : promptDirty ? '有未保存修改' : '已保存' }}</span>
-            <el-button type="primary" :loading="promptSaving" :disabled="!promptDirty" @click="savePrompt">{{ promptSaveError ? '重试保存' : '保存' }}</el-button>
-            <el-button type="danger" plain :disabled="promptSaving" @click="removePrompt">删除</el-button>
-          </div>
+
         </section>
       </div>
     </div>
@@ -1806,11 +1817,22 @@ function onThemeChange() {
   color: var(--el-text-color-secondary);
 }
 
-.prompt-layout {
+.prompt-list-toggle { display: flex; gap: 8px; margin-bottom: 10px; }
+.prompt-layout { position: relative; min-height: 500px;
   display: flex;
   gap: 14px;
   align-items: flex-start;
 }
+.compact .pl-list { position: absolute; inset: 0 auto auto 0; z-index: 4; width: min(300px, calc(100% - 40px)); box-sizing: border-box; max-height: 100%; background: var(--el-bg-color); box-shadow: var(--el-box-shadow-light); }
+.compact .pl-items { max-height: 420px; }
+.prompt-backdrop { position: absolute; inset: 0; border: 0; background: rgb(0 0 0 / 20%); z-index: 3; cursor: pointer; }
+.pl-editor-head { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; position: sticky; top: 0; z-index: 2; background: var(--el-bg-color); padding: 10px; margin-bottom: 12px; border-bottom: 1px solid var(--el-border-color); }
+.prompt-name-input { flex: 1; min-width: 220px; }
+.pl-editor-head .editor-actions { margin-top: 0; align-items: center; flex-wrap: wrap; }
+.compact .case-head { flex-wrap: wrap; gap: 8px; }
+.compact .case-row { grid-template-columns: minmax(0, 1fr) auto; }
+.compact .case-row > :nth-child(2) { grid-column: 1; }
+.compact .case-row > :last-child { grid-column: 2; grid-row: 1 / 3; }
 .pl-list {
   width: 240px;
   flex-shrink: 0;

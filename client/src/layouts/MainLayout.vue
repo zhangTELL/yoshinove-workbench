@@ -9,8 +9,14 @@ import { t } from '../locales'
 import type { IconKey } from '../utils/themeIcons'
 import { themedIcon } from '../utils/themeIcons'
 import { pomoDisplay, pomoMode, pomoPaused, pomoRunning, pomoTogglePause } from '../stores/pomodoro'
+import { Expand, Fold } from '@element-plus/icons-vue'
+import { useCompactLayout } from '../composables/useCompactLayout'
 
 const route = useRoute()
+const layoutEl = ref<HTMLElement>()
+const compactLayout = useCompactLayout(layoutEl, 1080)
+const navOverride = ref<boolean | null>(null)
+const navCollapsed = computed(() => navOverride.value ?? compactLayout.value)
 
 interface SubItem {
   key: string
@@ -164,17 +170,20 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <el-container class="layout">
-    <el-aside width="200px" class="aside">
+  <div ref="layoutEl" class="layout">
+  <el-container class="layout-inner">
+    <el-aside :width="navCollapsed ? '64px' : '200px'" class="aside" :class="{ collapsed: navCollapsed }">
       <div class="logo">
         <AppIcon
+          v-show="!navCollapsed"
           ref="logoIconRef"
           :icon="themedIcon('logo')"
           :size="26"
           @click="popLogo"
           @animationend="onLogoAnimEnd"
         />
-        <span class="logo-text">工作台</span>
+        <span v-if="!navCollapsed" class="logo-text">工作台</span>
+        <el-button text :icon="navCollapsed ? Expand : Fold" :aria-label="navCollapsed ? '展开导航' : '收起导航'" :title="navCollapsed ? '展开导航' : '收起导航'" :aria-expanded="!navCollapsed" @click="navOverride = !navCollapsed" />
       </div>
       <el-menu
         ref="menuRef"
@@ -182,6 +191,8 @@ onUnmounted(() => {
         :default-openeds="activeGroup ? [activeGroup.index] : []"
         router
         class="menu"
+        :collapse="navCollapsed"
+        :collapse-transition="false"
       >
         <template v-for="n in nav" :key="n.kind === 'group' ? n.index : n.path">
           <el-sub-menu v-if="n.kind === 'group'" :index="n.index">
@@ -206,21 +217,29 @@ onUnmounted(() => {
         <el-button size="small" @click="pomoTogglePause">{{ pomoPaused ? '继续' : '暂停' }}</el-button>
       </div>
     </el-aside>
-    <el-container>
+    <el-container class="content-container">
       <el-main class="main app-main">
         <router-view />
       </el-main>
     </el-container>
   </el-container>
+  </div>
 </template>
 
 <style scoped>
 .layout {
-  height: 100vh;
+  height: 100%;
 }
+.layout-inner { height: 100%; }
+.content-container { min-width: 0; }
+.logo .el-button { margin-left: auto; }
+.collapsed .logo { justify-content: center; padding-inline: 0; }
+.collapsed .logo .el-button { margin: 0; }
+.collapsed .pomo-mini { padding: 8px 4px; font-size: 11px; justify-content: center; }
 .pomo-mini { display: flex; flex-wrap: wrap; gap: 8px; padding: 12px; border-top: 1px solid var(--el-border-color-light); }
 .pomo-mini a { color: var(--el-color-primary); font-variant-numeric: tabular-nums; text-decoration: none; }
 .aside {
+  overflow-x: hidden;
   background: var(--el-bg-color);
   border-right: 1px solid var(--el-border-color-light);
   display: flex;

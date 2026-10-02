@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { Semester } from '@wb/shared'
-import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Delete, Plus } from '@element-plus/icons-vue'
 import Vditor from 'vditor'
@@ -8,6 +8,7 @@ import 'vditor/dist/index.css'
 import { del, get, post, put } from '../api/http'
 import { escapeHtml } from '../utils/escapeHtml'
 import { useUnsavedChanges } from '../composables/useUnsavedChanges'
+import { useCompactLayout } from '../composables/useCompactLayout'
 
 interface NoteMeta {
   id: number
@@ -37,6 +38,10 @@ const listLoading = ref(false)
 const listError = ref('')
 
 const currentId = ref<number | null>(null)
+const pageEl = ref<HTMLElement>()
+const compact = useCompactLayout(pageEl, 980)
+const listVisible = ref(true)
+watch(compact, (value) => { if (value) listVisible.value = currentId.value === null })
 const title = ref('')
 const courseTag = ref('')
 const category = ref('')
@@ -330,6 +335,7 @@ async function openNote(n: NoteMeta) {
   vditor.value?.setValue(full.content)
   savedSnap.value = takeSnap()
   saveError.value = ''
+  if (compact.value) listVisible.value = false
 }
 
 async function createNote() {
@@ -347,6 +353,7 @@ async function createNote() {
   savedSnap.value = takeSnap()
   await loadList()
   ElMessage.success('已创建，开始编辑吧')
+  if (compact.value) listVisible.value = false
 }
 
 async function saveNote() {
@@ -439,9 +446,15 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
 </script>
 
 <template>
-  <div class="notes-page" @dragover.prevent @drop.prevent="onDrop">
+  <div ref="pageEl" class="notes-page" :class="{ compact }" @dragover.prevent @drop.prevent="onDrop">
+    <div v-if="compact" class="notes-head">
+      <el-button :aria-expanded="listVisible" @click="listVisible = !listVisible">{{ listVisible ? '收起笔记列表' : '展开笔记列表' }}</el-button>
+      <el-button :icon="Plus" @click="createNote">新建笔记</el-button>
+    </div>
+    <div class="notes-workspace">
+    <button v-if="compact && listVisible" class="list-backdrop" aria-label="关闭笔记列表" @click="listVisible = false" />
     <!-- 左侧：搜索 + 筛选 + 列表 -->
-    <aside class="sidebar">
+    <aside v-show="!compact || listVisible" class="sidebar">
       <el-button type="primary" :icon="Plus" style="width: 100%" @click="createNote">新建笔记</el-button>
       <el-button style="width: 100%; margin: 8px 0 0" @click="fileInput?.click()">导入 MD 文件</el-button>
       <input ref="fileInput" type="file" accept=".md,.markdown,.txt" multiple hidden @change="onFilePick" />
@@ -489,58 +502,36 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
     <main class="editor-pane" v-loading="loading">
       <div v-show="currentId !== null" class="editor-wrap">
         <div class="editor-toolbar">
-          <span role="status" aria-live="polite" :title="saveError">{{ saveStatus }}</span>
-          <el-input v-model="title" placeholder="笔记标题" style="max-width: 320px" size="default">
-            <template #append>
-              <el-select
-                v-model="courseTag"
-                placeholder="课程标签"
-                style="width: 140px"
-                filterable
-                allow-create
-                default-first-option
-                clearable
-              >
+          <el-input v-model="title" class="note-title-input" placeholder="笔记标题" aria-label="笔记标题" />
+          <el-popover trigger="click" placement="bottom-end" :width="320">
+            <template #reference><el-button>更多操作</el-button></template>
+            <div class="note-options">
+              <label>课程标签</label>
+              <el-select v-model="courseTag" placeholder="课程标签" filterable allow-create default-first-option clearable>
                 <el-option v-for="t in [...new Set([...courseOptions, ...tags])]" :key="t" :value="t" :label="t" />
               </el-select>
-            </template>
-          </el-input>
-          <el-select
-            v-model="category"
-            placeholder="分类"
-            style="width: 120px"
-            filterable
-            allow-create
-            default-first-option
-            clearable
-          >
-            <el-option v-for="c in [...new Set(['课堂笔记', '复习', ...categories])]" :key="c" :value="c" :label="c" />
-          </el-select>
-          <div style="flex: 1" />
-          <el-select
-            v-model="themeName"
-            placeholder="主题（默认）"
-            size="default"
-            clearable
-            style="width: 140px"
-            @change="onThemeChange"
-          >
-            <el-option v-for="t in themes" :key="t.file" :value="t.file" :label="t.name" />
-          </el-select>
-          <el-tooltip content="从 Typora 的主题文件夹导入配色">
-            <el-button @click="importThemes">导入主题</el-button>
-          </el-tooltip>
-          <el-button @click="openPreview">预览</el-button>
-          <el-button :icon="Delete" text type="danger" @click="removeNote">删除</el-button>
-          <el-button @click="exportPdf">导出 PDF</el-button>
-          <el-button type="primary" :loading="saving" :disabled="!dirty" @click="saveNote">
-            {{ saveError ? '重试保存' : dirty ? '保存' : '已保存' }}
-          </el-button>
+              <label>分类</label>
+              <el-select v-model="category" placeholder="分类" filterable allow-create default-first-option clearable>
+                <el-option v-for="c in [...new Set(['课堂笔记', '复习', ...categories])]" :key="c" :value="c" :label="c" />
+              </el-select>
+              <label>编辑器主题</label>
+              <el-select v-model="themeName" placeholder="主题（默认）" clearable @change="onThemeChange">
+                <el-option v-for="t in themes" :key="t.file" :value="t.file" :label="t.name" />
+              </el-select>
+              <el-button @click="importThemes">导入主题</el-button>
+              <el-button @click="openPreview">预览</el-button>
+              <el-button @click="exportPdf">导出 PDF</el-button>
+              <el-button :icon="Delete" text type="danger" :disabled="saving" @click="removeNote">删除笔记</el-button>
+            </div>
+          </el-popover>
+          <el-button type="primary" :loading="saving" :disabled="!dirty" @click="saveNote">{{ saveError ? '重试保存' : dirty ? '保存' : '已保存' }}</el-button>
         </div>
+        <span class="editor-save-status" role="status" aria-live="polite" :title="saveError">{{ saveStatus }}</span>
         <div ref="editorEl" class="editor" />
       </div>
       <el-empty v-if="currentId === null" description="从左侧选择笔记，或新建一篇" style="margin-top: 20vh" />
     </main>
+    </div>
 
     <!-- 主题预览 -->
     <el-dialog v-model="previewVisible" :title="`预览：${title || '未命名'}（${themeName || '默认样式'}）`" width="80%" top="3vh" destroy-on-close>
@@ -558,10 +549,22 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
 
 <style scoped>
 .notes-page {
+  height: 100%;
+  min-height: 420px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.notes-workspace {
+  position: relative;
   display: flex;
   gap: 14px;
-  height: calc(100vh - 60px);
+  flex: 1;
+  min-height: 0;
 }
+.notes-head { display: flex; gap: 8px; }
+.compact .sidebar { position: absolute; inset: 0 auto 0 0; z-index: 4; width: min(300px, calc(100% - 40px)); box-sizing: border-box; box-shadow: var(--el-box-shadow-light); }
+.list-backdrop { position: absolute; inset: 0; z-index: 3; border: 0; background: rgb(0 0 0 / 20%); cursor: pointer; }
 .sidebar {
   width: 280px;
   flex-shrink: 0;
@@ -647,6 +650,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
 }
 .editor-pane {
   flex: 1;
+  min-width: 0;
   background: var(--el-bg-color);
   border: 1px solid var(--el-border-color);
   border-radius: var(--wb-radius-card);
@@ -657,6 +661,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
 }
 .editor-wrap {
   flex: 1;
+  min-height: 0;
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -668,8 +673,14 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
   margin-bottom: 10px;
   flex-wrap: wrap;
 }
+.note-title-input { flex: 1; min-width: 140px; }
+.editor-toolbar > .el-button { margin-left: 0; }
+.editor-save-status { font-size: 12px; color: var(--el-text-color-secondary); margin-bottom: 8px; }
+.note-options { display: flex; flex-direction: column; gap: 8px; }
+.note-options .el-button { margin-left: 0; }
 .editor {
   flex: 1;
+  min-height: 0;
 }
 .editor :deep(.vditor) {
   border-radius: var(--wb-radius-base);
