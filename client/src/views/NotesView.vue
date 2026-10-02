@@ -31,6 +31,10 @@ const courseOptions = ref<string[]>([])
 const searchQuery = ref('')
 const filterTag = ref('')
 const filterCategory = ref('')
+let listSeq = 0
+let searchTimer: number | undefined
+const listLoading = ref(false)
+const listError = ref('')
 
 const currentId = ref<number | null>(null)
 const title = ref('')
@@ -271,13 +275,37 @@ function exportPdf() {
 }
 
 async function loadList() {
+  window.clearTimeout(searchTimer)
+  const seq = ++listSeq
+  listLoading.value = true
+  listError.value = ''
   const params = new URLSearchParams()
   if (searchQuery.value.trim()) params.set('query', searchQuery.value.trim())
-  notes.value = await get<NoteMeta[]>(`/api/notes?${params.toString()}`)
-  const meta = await get<{ tags: string[]; categories: string[] }>('/api/notes/meta')
-  tags.value = meta.tags
-  categories.value = meta.categories
+  try {
+    const [list, meta] = await Promise.all([
+      get<NoteMeta[]>(`/api/notes?${params.toString()}`),
+      get<{ tags: string[]; categories: string[] }>('/api/notes/meta'),
+    ])
+    if (seq !== listSeq) return
+    notes.value = list
+    tags.value = meta.tags
+    categories.value = meta.categories
+  } catch (e) {
+    if (seq === listSeq) listError.value = (e as Error).message
+  } finally { if (seq === listSeq) listLoading.value = false }
 }
+
+function searchNotes() {
+  ++listSeq
+  window.clearTimeout(searchTimer)
+  listLoading.value = true
+  searchTimer = window.setTimeout(() => { void loadList() }, 280)
+}
+function clearNoteFilters() {
+  searchQuery.value = filterTag.value = filterCategory.value = ''
+  void loadList()
+}
+onBeforeUnmount(() => { ++listSeq; window.clearTimeout(searchTimer) })
 
 async function loadCourseOptions() {
   try {
@@ -418,7 +446,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
       <el-button style="width: 100%; margin: 8px 0 0" @click="fileInput?.click()">导入 MD 文件</el-button>
       <input ref="fileInput" type="file" accept=".md,.markdown,.txt" multiple hidden @change="onFilePick" />
       <div class="drop-hint">把 .md 文件拖到这一页就能导入</div>
-      <el-input v-model="searchQuery" placeholder="搜索标题/内容…" clearable style="margin-top: 10px" @input="loadList" />
+      <el-input v-model="searchQuery" placeholder="搜索标题/内容…" clearable style="margin-top: 10px" @input="searchNotes" />
       <div class="filter-group">
         <div class="filter-title">课程标签</div>
         <div class="filter-item" :class="{ active: !filterTag }" @click="filterTag = ''">全部</div>
@@ -433,7 +461,10 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
           {{ c }}
         </div>
       </div>
-      <div class="note-list">
+      <el-alert v-if="listError" :title="`加载失败：${listError}`" type="error" :closable="false">
+        <el-button size="small" @click="loadList">重试</el-button>
+      </el-alert>
+      <div v-loading="listLoading" class="note-list">
         <div
           v-for="n in filteredNotes"
           :key="n.id"
@@ -448,7 +479,9 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
           </div>
           <div class="note-excerpt">{{ n.excerpt }}</div>
         </div>
-        <el-empty v-if="!filteredNotes.length" :image-size="60" description="没有笔记" />
+        <el-empty v-if="!listLoading && !listError && !filteredNotes.length" :image-size="60" :description="searchQuery.trim() || filterTag || filterCategory ? '没有符合当前搜索或筛选的笔记' : '没有笔记'">
+          <el-button v-if="searchQuery.trim() || filterTag || filterCategory" size="small" @click="clearNoteFilters">清除筛选</el-button>
+        </el-empty>
       </div>
     </aside>
 

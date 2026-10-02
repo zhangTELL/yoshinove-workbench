@@ -79,6 +79,9 @@ const data = ref<ListResp | null>(null)
 const categories = ref<Category[]>([])
 const uncategorized = ref(0)
 const loading = ref(false)
+const loadError = ref('')
+let listSeq = 0
+let searchTimer: number | undefined
 const scanStatus = ref<ScanStatus | null>(null)
 
 // 筛选
@@ -285,7 +288,10 @@ async function loadCategories() {
 }
 
 async function loadList() {
+  window.clearTimeout(searchTimer)
+  const seq = ++listSeq
   loading.value = true
+  loadError.value = ''
   const p = new URLSearchParams()
   p.set('sort', sort.value)
   p.set('level', weakOnly.value ? 'weak' : 'all')
@@ -298,13 +304,30 @@ async function loadList() {
   if (stackFilter.value) p.set('stack', stackFilter.value)
   if (showNested.value) p.set('nested', '1')
   try {
-    data.value = await get<ListResp>(`/api/projects?${p.toString()}`)
+    const result = await get<ListResp>(`/api/projects?${p.toString()}`)
+    if (seq === listSeq) data.value = result
   } catch (e) {
-    ElMessage.error(`加载失败：${(e as Error).message}`)
+    if (seq === listSeq) loadError.value = (e as Error).message
   } finally {
-    loading.value = false
+    if (seq === listSeq) loading.value = false
   }
 }
+
+function searchProjects() {
+  ++listSeq
+  window.clearTimeout(searchTimer)
+  loading.value = true
+  searchTimer = window.setTimeout(() => { void loadList() }, 280)
+}
+const hasFilters = computed(() => !!q.value.trim() || activeCategory.value !== 'all' || favOnly.value || gitOnly.value || aiOnly.value || weakOnly.value || !!stackFilter.value || showNested.value)
+function clearFilters() {
+  q.value = ''
+  activeCategory.value = 'all'
+  favOnly.value = gitOnly.value = aiOnly.value = weakOnly.value = showNested.value = false
+  stackFilter.value = ''
+  void loadList()
+}
+onUnmounted(() => { ++listSeq; window.clearTimeout(searchTimer) })
 
 async function refresh() {
   await Promise.all([loadCategories(), loadList()])
@@ -732,7 +755,7 @@ onUnmounted(() => {
         </div>
 
         <div class="filter-bar">
-          <el-input v-model="q" placeholder="搜索名称 / 路径 / 备注" clearable :prefix-icon="Search" class="search" @input="loadList" />
+          <el-input v-model="q" placeholder="搜索名称 / 路径 / 备注" clearable :prefix-icon="Search" class="search" @input="searchProjects" />
           <el-checkbox v-model="favOnly" @change="loadList">收藏</el-checkbox>
           <el-checkbox v-model="gitOnly" @change="loadList">有 Git</el-checkbox>
           <el-checkbox v-model="aiOnly" @change="loadList">AI 标记</el-checkbox>
@@ -764,10 +787,12 @@ onUnmounted(() => {
           <el-button size="small" text @click="selected = new Set()">取消选择</el-button>
         </div>
 
-        <el-empty
-          v-if="!loading && !data?.list.length"
-          description="这里还没有项目：点「扫描目录」导入，或「添加项目」手动加一个"
-        />
+        <el-alert v-if="loadError" :title="`加载失败：${loadError}`" type="error" :closable="false">
+          <el-button size="small" @click="loadList">重试</el-button>
+        </el-alert>
+        <el-empty v-if="!loading && !loadError && !data?.list.length" :description="hasFilters ? `没有符合当前筛选的项目${q.trim() ? `（关键词：${q.trim()}）` : ''}` : '这里还没有项目：点「扫描目录」导入，或「添加项目」手动加一个'">
+          <el-button v-if="hasFilters" @click="clearFilters">清除筛选</el-button>
+        </el-empty>
         <div v-else v-loading="loading" class="proj-list">
           <div v-for="p in data?.list ?? []" :key="p.id" class="proj-card" draggable="true" @dragstart="onCardDragStart($event, p)" @dblclick="openFiles(p)">
             <el-checkbox
