@@ -8,6 +8,7 @@ import AppIcon from '../components/AppIcon.vue'
 import { t } from '../locales'
 import type { IconKey } from '../utils/themeIcons'
 import { themedIcon } from '../utils/themeIcons'
+import { pomoDisplay, pomoMode, pomoPaused, pomoRunning, pomoTogglePause } from '../stores/pomodoro'
 
 const route = useRoute()
 
@@ -200,6 +201,10 @@ onUnmounted(() => {
           </el-menu-item>
         </template>
       </el-menu>
+      <div v-if="pomoRunning" class="pomo-mini">
+        <router-link to="/tools?tab=pomodoro">{{ pomoPaused ? '已暂停' : pomoMode === 'work' ? '专注中' : '休息中' }} · {{ pomoDisplay }}</router-link>
+        <el-button size="small" @click="pomoTogglePause">{{ pomoPaused ? '继续' : '暂停' }}</el-button>
+      </div>
     </el-aside>
     <el-container>
       <el-main class="main app-main">
@@ -213,6 +218,8 @@ onUnmounted(() => {
 .layout {
   height: 100vh;
 }
+.pomo-mini { display: flex; flex-wrap: wrap; gap: 8px; padding: 12px; border-top: 1px solid var(--el-border-color-light); }
+.pomo-mini a { color: var(--el-color-primary); font-variant-numeric: tabular-nums; text-decoration: none; }
 .aside {
   background: var(--el-bg-color);
   border-right: 1px solid var(--el-border-color-light);

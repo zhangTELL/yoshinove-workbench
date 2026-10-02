@@ -2,11 +2,12 @@
 import type { Semester } from '@wb/shared'
 import * as echarts from 'echarts'
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
-import { ElMessage, ElMessageBox, ElNotification } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import { Delete, Edit, Plus, Upload } from '@element-plus/icons-vue'
 import { useRoute, useRouter } from 'vue-router'
 import { del, get, post, put, upload } from '../api/http'
 import { chartAlertColor, chartBarColor, chartPalette } from '../utils/chartTheme'
+import { pomoData, pomoRunning, pomoPaused, pomoMode, pomoWorkMin, pomoBreakMin, pomoTask, pomoTag, pomoDisplay, loadPomodoro, pomoStart, pomoTogglePause, pomoGiveUp } from '../stores/pomodoro'
 
 // ==================== 工具页布局 ====================
 // 栏目切换由左侧主导航的「日常工具」折叠分组控制，本页只按 ?tab= 渲染对应板块
@@ -640,115 +641,8 @@ async function removeScore(r: ScoreRow) {
 }
 
 // ==================== 番茄钟 ====================
-interface PomodoroData {
-  todayMin: number
-  daily: { date: string; minutes: number }[]
-  recent: { id: number; taskLabel: string; courseTag: string; startedAt: string; durationMin: number }[]
-}
-
-const pomoData = ref<PomodoroData | null>(null)
-const pomoRunning = ref(false)
-const pomoMode = ref<'work' | 'break'>('work')
-const pomoRemain = ref(25 * 60)
-const pomoWorkMin = ref(25)
-const pomoBreakMin = ref(5)
-const pomoTask = ref('')
-const pomoTag = ref('')
-const pomoStartedAt = ref('')
-const pomoElapsed = ref(0)
-let pomoTimer: number | undefined
-
-const pomoDisplay = computed(() => {
-  const m = Math.floor(pomoRemain.value / 60)
-  const s = pomoRemain.value % 60
-  return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`
-})
-const pomoProgress = computed(() => {
-  const total = (pomoMode.value === 'work' ? pomoWorkMin.value : pomoBreakMin.value) * 60
-  return (pomoElapsed.value / total) * 100
-})
 const pomoMaxDaily = computed(() => Math.max(60, ...(pomoData.value?.daily ?? []).map((d) => d.minutes)))
 const pomoHasDaily = computed(() => (pomoData.value?.daily ?? []).some((d) => d.minutes > 0))
-
-async function loadPomodoro() {
-  pomoData.value = await get<PomodoroData>('/api/pomodoro?days=14')
-}
-
-/**
- * 布局切换（进入/退出专注态）用 View Transition 做「一镜到底」：
- * 钟表元素带 view-transition-name，新旧两帧里各出现一次，浏览器自动从原位 morph 到新位。
- * 不支持的浏览器（非 Chromium 111+）直接切换，无动画。
- */
-function withViewTransition(fn: () => void): void {
-  const doc = document as Document & { startViewTransition?: (cb: () => void) => unknown }
-  if (typeof doc.startViewTransition === 'function') doc.startViewTransition(fn)
-  else fn()
-}
-
-function pomoStart() {
-  if (pomoRunning.value) return
-  withViewTransition(() => {
-    pomoRunning.value = true
-    pomoMode.value = 'work'
-    pomoRemain.value = pomoWorkMin.value * 60
-    pomoElapsed.value = 0
-    pomoStartedAt.value = new Date().toISOString()
-  })
-  pomoTimer = window.setInterval(() => {
-    pomoRemain.value--
-    pomoElapsed.value++
-    if (pomoRemain.value <= 0) {
-      if (pomoMode.value === 'work') {
-        void recordPomodoro(pomoWorkMin.value)
-        ElNotification({ title: '番茄完成 🍅', message: `专注 ${pomoWorkMin.value} 分钟，休息一下！`, type: 'success' })
-        pomoMode.value = 'break'
-        pomoRemain.value = pomoBreakMin.value * 60
-        pomoElapsed.value = 0
-      } else {
-        ElNotification({ title: '休息结束', message: '开始下一个番茄吧！', type: 'info' })
-        exitFocusUI()
-      }
-    }
-  }, 1000)
-}
-
-function pomoStop() {
-  pomoRunning.value = false
-  if (pomoTimer) clearInterval(pomoTimer)
-}
-
-/** 退出专注态：复位到准备就绪布局（带一镜到底动画） */
-function exitFocusUI() {
-  withViewTransition(() => {
-    pomoRunning.value = false
-    if (pomoTimer) clearInterval(pomoTimer)
-    pomoMode.value = 'work'
-    pomoRemain.value = pomoWorkMin.value * 60
-    pomoElapsed.value = 0
-  })
-}
-
-async function recordPomodoro(minutes: number) {
-  if (pomoElapsed.value < 60 && minutes < 1) return
-  await post('/api/pomodoro', {
-    taskLabel: pomoTask.value,
-    courseTag: pomoTag.value,
-    startedAt: pomoStartedAt.value,
-    endedAt: new Date().toISOString(),
-    durationMin: minutes,
-  })
-  await loadPomodoro()
-}
-
-async function pomoGiveUp() {
-  const minutes = Math.floor(pomoElapsed.value / 60)
-  const wasWork = pomoMode.value === 'work'
-  exitFocusUI()
-  if (minutes >= 1 && wasWork) {
-    await recordPomodoro(minutes)
-    ElMessage.success(`已记录 ${minutes} 分钟专注`)
-  }
-}
 
 // ==================== 初始化 ====================
 onMounted(() => {
@@ -767,7 +661,6 @@ onMounted(() => {
   window.addEventListener('wb-theme-change', onThemeChange)
 })
 onUnmounted(() => {
-  pomoStop()
   disposeCharts()
   window.removeEventListener('resize', onWindowResize)
   window.removeEventListener('wb-theme-change', onThemeChange)
@@ -977,13 +870,14 @@ function onWindowResize() {
         <div v-if="pomoRunning" class="pomo-focus">
           <div class="pomo-circle" :class="{ running: pomoRunning, break: pomoMode === 'break' }">
             <div class="pomo-time">{{ pomoDisplay }}</div>
-            <div class="pomo-mode">{{ pomoMode === 'work' ? '专注中' : '休息中' }}</div>
+            <div class="pomo-mode">{{ pomoPaused ? '已暂停' : pomoMode === 'work' ? '专注中' : '休息中' }}</div>
           </div>
           <div v-if="pomoTask || pomoTag" class="pomo-focus-task">
             {{ pomoTask }}<template v-if="pomoTask && pomoTag"> · </template>{{ pomoTag }}
           </div>
           <div class="pomo-controls">
-            <el-button type="warning" size="large" round @click="pomoGiveUp">结束并记录</el-button>
+            <el-button size="large" round @click="pomoTogglePause">{{ pomoPaused ? '继续专注' : '暂停' }}</el-button>
+            <el-button type="warning" size="large" round @click="pomoGiveUp">{{ pomoMode === 'work' ? '结束并记录' : '结束休息' }}</el-button>
           </div>
         </div>
         <template v-else>
