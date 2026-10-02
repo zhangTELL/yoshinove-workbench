@@ -18,6 +18,7 @@ import { del, get, post, put } from '../api/http'
 //    同名会**整体遮蔽**这个 import（而且 TDZ 下调用会直接 ReferenceError）
 import { chartPalette, chartSeries as chartSeriesColors } from '../utils/chartTheme'
 import { wrapPreviewDoc } from '../utils/previewDoc'
+import { useUnsavedChanges } from '../composables/useUnsavedChanges'
 
 // ==================== 板块切换（由左侧主导航的折叠分组驱动）====================
 const route = useRoute()
@@ -712,6 +713,10 @@ const promptList = ref<PromptRecord[]>([])
 const curPromptId = ref(0)
 const promptForm = ref({ name: '', content: '', cases: [] as { input: string; expected: string }[] })
 const promptSearch = ref('')
+const promptSaving = ref(false)
+const promptSnapshot = ref(JSON.stringify(promptForm.value))
+const promptDirty = computed(() => JSON.stringify(promptForm.value) !== promptSnapshot.value)
+const confirmPromptLeave = useUnsavedChanges(promptDirty, savePrompt, '当前提示词', true)
 
 const filteredPrompts = computed(() => {
   const kw = promptSearch.value.trim().toLowerCase()
@@ -732,47 +737,58 @@ const previewVars = computed(() => {
 async function loadPrompts() {
   const r = await get<{ prompts: PromptRecord[] }>('/api/ai/prompts')
   promptList.value = r.prompts
-  if (!promptList.value.some((p) => p.id === curPromptId.value)) {
-    if (promptList.value.length) selectPrompt(promptList.value[0])
-    else newPrompt()
+  if (!promptDirty.value && !promptList.value.some((p) => p.id === curPromptId.value)) {
+    resetPrompt(promptList.value[0])
   }
 }
 
-function selectPrompt(p: PromptRecord) {
-  curPromptId.value = p.id
-  promptForm.value = {
+function resetPrompt(p?: PromptRecord) {
+  curPromptId.value = p?.id ?? 0
+  promptForm.value = p ? {
     name: p.name,
     content: p.content,
     cases: p.cases.map((c) => ({ input: c.input, expected: c.expected })),
-  }
+  } : { name: '', content: '', cases: [] }
+  promptSnapshot.value = JSON.stringify(promptForm.value)
 }
 
-function newPrompt() {
-  curPromptId.value = 0
-  promptForm.value = { name: '', content: '', cases: [] }
+async function selectPrompt(p: PromptRecord) {
+  if (p.id !== curPromptId.value && await confirmPromptLeave()) resetPrompt(p)
+}
+
+async function newPrompt() {
+  if (await confirmPromptLeave()) resetPrompt()
 }
 
 async function savePrompt() {
-  const f = promptForm.value
+  if (promptSaving.value) return false
+  const form = promptForm.value
+  const id = curPromptId.value
+  const f = structuredClone({ name: form.name, content: form.content, cases: form.cases.map((c) => ({ ...c })) })
   if (!f.name.trim()) {
     ElMessage.warning('请填写名称')
-    return
+    return false
   }
+  promptSaving.value = true
   try {
-    if (curPromptId.value) {
-      const r = await put<{ ok: boolean; prompt: PromptRecord }>(`/api/ai/prompts/${curPromptId.value}`, f)
+    if (id) {
+      const r = await put<{ ok: boolean; prompt: PromptRecord }>(`/api/ai/prompts/${id}`, f)
       if (r.prompt) {
-        curPromptId.value = r.prompt.id
         ElMessage.success(`已保存（版本 v${r.prompt.version}）`)
       }
     } else {
       const r = await post<{ ok: boolean; id: number }>('/api/ai/prompts', f)
-      curPromptId.value = r.id
+      if (promptForm.value === form) curPromptId.value = r.id
       ElMessage.success('已新建')
     }
+    if (promptForm.value === form) promptSnapshot.value = JSON.stringify(f)
     await loadPrompts()
+    return true
   } catch (e) {
     ElMessage.error((e as Error).message)
+    return false
+  } finally {
+    promptSaving.value = false
   }
 }
 
@@ -787,7 +803,7 @@ async function removePrompt() {
     return
   }
   await del(`/api/ai/prompts/${curPromptId.value}`)
-  curPromptId.value = 0
+  resetPrompt()
   await loadPrompts()
   ElMessage.success('已删除')
 }

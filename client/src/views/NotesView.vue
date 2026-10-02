@@ -7,6 +7,7 @@ import Vditor from 'vditor'
 import 'vditor/dist/index.css'
 import { del, get, post, put } from '../api/http'
 import { escapeHtml } from '../utils/escapeHtml'
+import { useUnsavedChanges } from '../composables/useUnsavedChanges'
 
 interface NoteMeta {
   id: number
@@ -63,6 +64,7 @@ const dirty = computed(() => {
 })
 
 const vditor = ref<Vditor | null>(null)
+const confirmSave = useUnsavedChanges(dirty, saveNote, '当前笔记')
 const editorEl = ref<HTMLDivElement>()
 
 // ===== 主题 =====
@@ -299,20 +301,6 @@ async function openNote(n: NoteMeta) {
   savedSnap.value = takeSnap()
 }
 
-async function confirmSave(): Promise<boolean> {
-  try {
-    await ElMessageBox.confirm('当前笔记有未保存的修改，确定离开？', '提示', {
-      confirmButtonText: '不保存离开',
-      cancelButtonText: '留在这',
-      type: 'warning',
-    })
-    savedSnap.value = takeSnap() // 「不保存离开」= 放弃差异，调用的两处随后都会重置基准
-    return true
-  } catch {
-    return false
-  }
-}
-
 async function createNote() {
   if (dirty.value && !(await confirmSave())) return
   const r = await post<{ id: number }>('/api/notes', {
@@ -331,7 +319,7 @@ async function createNote() {
 }
 
 async function saveNote() {
-  if (currentId.value === null || saving.value) return
+  if (currentId.value === null || saving.value) return false
   const noteId = currentId.value
   const baseline = savedSnap.value
   // 快照"提交时的内容"作为基准（审查修复 #4）：请求期间继续输入的话，
@@ -349,6 +337,10 @@ async function saveNote() {
     if (currentId.value === noteId && savedSnap.value === baseline) savedSnap.value = payload
     await loadList()
     ElMessage.success('已保存')
+    return true
+  } catch (e) {
+    ElMessage.error(`保存失败：${(e as Error).message}`)
+    return false
   } finally {
     saving.value = false
   }

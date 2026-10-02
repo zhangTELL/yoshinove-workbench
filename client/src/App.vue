@@ -1,11 +1,13 @@
 <template>
   <el-config-provider :locale="epLocale">
     <router-view />
+    <UnsavedChangesDialog />
   </el-config-provider>
 </template>
 
 <script setup lang="ts">
 import { epLocale } from './locales'
+import UnsavedChangesDialog from './components/UnsavedChangesDialog.vue'
 </script>
 
 <style>

@@ -25,8 +25,8 @@ const router = createRouter({
   ],
 })
 
-router.afterEach((to) => {
-  applyTitle(pageTitleOf(to))
+router.afterEach((to, _from, failure) => {
+  if (!failure) applyTitle(pageTitleOf(to))
 })
 
 // 改称呼 / 切语言后标签页标题都要立刻跟着变，不等下次路由切换

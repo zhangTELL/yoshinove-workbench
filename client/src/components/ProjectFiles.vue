@@ -216,6 +216,7 @@ import CodeEditor from './CodeEditor.vue'
 import OpenInAppButton from './OpenInAppButton.vue'
 import { del, get, patch, post, put } from '../api/http'
 import { wrapPreviewDoc } from '../utils/previewDoc'
+import { useUnsavedChanges } from '../composables/useUnsavedChanges'
 
 interface ProjectLite {
   id: number
@@ -466,21 +467,7 @@ let openSeq = 0
 
 /** 切换文件前的未保存确认：保存 / 放弃 / 取消（审查修复 #3）。
  *  原来的 openFile 不看 dirty 直接替换草稿，编辑 A 后点 B，A 的修改被无声丢掉。 */
-async function confirmBeforeSwitch(): Promise<boolean> {
-  if (!dirty.value || !current.value) return true
-  try {
-    await ElMessageBox.confirm(`「${current.value.rel}」有未保存的修改，切换前要保存吗？`, '未保存的修改', {
-      distinguishCancelAndClose: true,
-      confirmButtonText: '保存并切换',
-      cancelButtonText: '放弃修改',
-      type: 'warning',
-    })
-    // 保存失败或保存期间继续输入，都保留当前文件和未保存草稿。
-    return (await save()) && !dirty.value
-  } catch (action) {
-    return action === 'cancel' // cancelButtonText = 放弃修改 → 放行；Esc / × = 取消
-  }
-}
+const confirmBeforeSwitch = useUnsavedChanges(dirty, save, '当前文件')
 
 async function openFile(rel: string) {
   if (!(await confirmBeforeSwitch())) return
@@ -573,20 +560,7 @@ async function init() {
  * 自己的返回按钮是唯一的关闭入口，丢了确认就是无声丢改动。
  */
 async function requestBack() {
-  if (!dirty.value) {
-    emit('back')
-    return
-  }
-  try {
-    await ElMessageBox.confirm('有未保存的修改，确定返回吗？', '未保存', {
-      confirmButtonText: '放弃修改并返回',
-      cancelButtonText: '继续编辑',
-      type: 'warning',
-    })
-    emit('back')
-  } catch {
-    /* 用户取消 */
-  }
+  if (await confirmBeforeSwitch()) emit('back')
 }
 
 onMounted(() => {
