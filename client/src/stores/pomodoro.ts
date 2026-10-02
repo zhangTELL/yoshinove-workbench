@@ -16,6 +16,8 @@ export const pomoWorkMin = ref(25)
 export const pomoBreakMin = ref(5)
 export const pomoTask = ref('')
 export const pomoTag = ref('')
+interface RecordPayload { taskLabel: string; courseTag: string; startedAt: string; endedAt: string; durationMin: number }
+export const failedPomoRecords = ref<{ payload: RecordPayload; error: string; saving: boolean }[]>([])
 let startedAt = ''
 let deadline = 0
 let pausedMs = 0
@@ -42,7 +44,22 @@ async function record(minutes: number, endedAt: number) {
   try {
     await post('/api/pomodoro', payload)
     await loadPomodoro()
-  } catch (e) { ElMessage.error(`专注记录保存失败：${(e as Error).message}`) }
+  } catch (e) {
+    failedPomoRecords.value.push({ payload, error: (e as Error).message, saving: false })
+    ElMessage.error(`专注记录保存失败，可在番茄钟页面重试：${(e as Error).message}`)
+  }
+}
+
+export async function retryPomoRecord(entry: (typeof failedPomoRecords.value)[number]) {
+  if (entry.saving) return
+  entry.saving = true
+  try {
+    await post('/api/pomodoro', entry.payload)
+    failedPomoRecords.value = failedPomoRecords.value.filter((item) => item !== entry)
+    ElMessage.success('专注记录已保存')
+    await loadPomodoro()
+  } catch (e) { entry.error = (e as Error).message; ElMessage.error(`重试失败：${entry.error}`) }
+  finally { entry.saving = false }
 }
 
 function reset() {

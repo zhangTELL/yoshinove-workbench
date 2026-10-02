@@ -151,15 +151,19 @@ async function loadSemesterInfo() {
   semesterRange.value = { start: cur.startDate, end: fmt(end) }
 }
 
-async function loadAll() {
+async function loadAll(refreshSettings = false) {
   loading.value = true
   try {
     status.value = await get<ChaoxingStatus>('/api/chaoxing/status')
     homework.value = await get<Homework[]>('/api/chaoxing/homework')
-    const settings = await get<Record<string, any>>('/api/settings')
-    remindBefore.value = settings['chaoxing.remindBefore'] ?? [1440, 360]
-    channels.value = settings['chaoxing.channels'] ?? ['browser']
-    autoSyncMin.value = settings['chaoxing.autoSyncMin'] ?? 0
+    if (refreshSettings) {
+      const settings = await get<Record<string, any>>('/api/settings')
+      remindBefore.value = settings['chaoxing.remindBefore'] ?? [1440, 360]
+      channels.value = settings['chaoxing.channels'] ?? ['browser']
+      autoSyncMin.value = settings['chaoxing.autoSyncMin'] ?? 0
+    }
+  } catch (e) {
+    ElMessage.error(`学习通数据加载失败：${(e as Error).message}`)
   } finally {
     loading.value = false
   }
@@ -167,25 +171,29 @@ async function loadAll() {
 
 onMounted(() => {
   void loadSemesterInfo()
-  void loadAll()
+  void loadAll(true)
 })
 
 // ===== 操作 =====
 async function saveCookie() {
+  if (savingCookie.value) return
   if (!cookieInput.value.trim()) {
     ElMessage.warning('请先粘贴 Cookie')
     return
   }
   savingCookie.value = true
+  const sentCookie = cookieInput.value
   try {
-    const r = await post<{ ok: boolean; detail: string; uid?: string }>('/api/chaoxing/cookie', { cookie: cookieInput.value })
+    const r = await post<{ ok: boolean; detail: string; uid?: string }>('/api/chaoxing/cookie', { cookie: sentCookie })
     if (r.ok) {
       ElMessage.success(`Cookie 已保存（${r.detail}）`)
-      cookieInput.value = ''
+      if (cookieInput.value === sentCookie) cookieInput.value = ''
       await loadAll()
     } else {
       ElMessage.error(r.detail)
     }
+  } catch (e) {
+    ElMessage.error(`Cookie 验证失败：${(e as Error).message}`)
   } finally {
     savingCookie.value = false
   }
@@ -199,18 +207,22 @@ async function removeCookie() {
 }
 
 async function sync() {
+  if (syncing.value) return
   syncing.value = true
   try {
     const r = await post<{ ok: boolean; detail: string; total: number }>('/api/chaoxing/sync')
     if (r.ok) ElMessage.success(r.detail)
     else ElMessage.error(r.detail)
     await loadAll()
+  } catch (e) {
+    ElMessage.error(`同步失败：${(e as Error).message}`)
   } finally {
     syncing.value = false
   }
 }
 
 async function saveRemindSettings() {
+  if (savingSettings.value) return
   savingSettings.value = true
   try {
     // 必须是 PUT：服务端只注册了 PUT /api/settings，用 POST 会 404，

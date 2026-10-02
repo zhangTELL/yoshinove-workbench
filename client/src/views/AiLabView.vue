@@ -714,6 +714,7 @@ const curPromptId = ref(0)
 const promptForm = ref({ name: '', content: '', cases: [] as { input: string; expected: string }[] })
 const promptSearch = ref('')
 const promptSaving = ref(false)
+const promptSaveError = ref('')
 const promptSnapshot = ref(JSON.stringify(promptForm.value))
 const promptDirty = computed(() => JSON.stringify(promptForm.value) !== promptSnapshot.value)
 const confirmPromptLeave = useUnsavedChanges(promptDirty, savePrompt, '当前提示词', true)
@@ -750,6 +751,7 @@ function resetPrompt(p?: PromptRecord) {
     cases: p.cases.map((c) => ({ input: c.input, expected: c.expected })),
   } : { name: '', content: '', cases: [] }
   promptSnapshot.value = JSON.stringify(promptForm.value)
+  promptSaveError.value = ''
 }
 
 async function selectPrompt(p: PromptRecord) {
@@ -770,6 +772,7 @@ async function savePrompt() {
     return false
   }
   promptSaving.value = true
+  promptSaveError.value = ''
   try {
     if (id) {
       const r = await put<{ ok: boolean; prompt: PromptRecord }>(`/api/ai/prompts/${id}`, f)
@@ -782,9 +785,10 @@ async function savePrompt() {
       ElMessage.success('已新建')
     }
     if (promptForm.value === form) promptSnapshot.value = JSON.stringify(f)
-    await loadPrompts()
+    try { await loadPrompts() } catch (e) { ElMessage.warning(`提示词已保存，列表刷新失败：${(e as Error).message}`) }
     return true
   } catch (e) {
+    if (promptForm.value === form) promptSaveError.value = (e as Error).message
     ElMessage.error((e as Error).message)
     return false
   } finally {
@@ -1274,8 +1278,9 @@ function onThemeChange() {
           <el-empty v-if="!promptForm.cases.length" description="没有用例，模型对比时可临时填写" :image-size="60" />
 
           <div class="editor-actions">
-            <el-button type="primary" @click="savePrompt">保存</el-button>
-            <el-button type="danger" plain @click="removePrompt">删除</el-button>
+            <span role="status" :title="promptSaveError">{{ promptSaving ? '正在保存…' : promptSaveError ? '保存失败，可重试' : promptDirty ? '有未保存修改' : '已保存' }}</span>
+            <el-button type="primary" :loading="promptSaving" :disabled="!promptDirty" @click="savePrompt">{{ promptSaveError ? '重试保存' : '保存' }}</el-button>
+            <el-button type="danger" plain :disabled="promptSaving" @click="removePrompt">删除</el-button>
           </div>
         </section>
       </div>

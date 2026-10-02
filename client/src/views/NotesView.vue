@@ -37,6 +37,8 @@ const title = ref('')
 const courseTag = ref('')
 const category = ref('')
 const saving = ref(false)
+const saveError = ref('')
+const saveStatus = computed(() => saving.value ? '正在保存…' : saveError.value ? '保存失败，可重试' : dirty.value ? '有未保存修改' : '已保存')
 
 /* ===== 脏状态：完整字段快照对比（2026-10-01 审查修复 #4 + #7）=====
    原来是一个由编辑器 input 事件手拨的布尔：① 只有正文输入会置脏，改标题/课程标签/分类
@@ -299,6 +301,7 @@ async function openNote(n: NoteMeta) {
   category.value = full.category
   vditor.value?.setValue(full.content)
   savedSnap.value = takeSnap()
+  saveError.value = ''
 }
 
 async function createNote() {
@@ -331,14 +334,16 @@ async function saveNote() {
     category: category.value,
   }
   saving.value = true
+  saveError.value = ''
   try {
     await put(`/api/notes/${noteId}`, payload)
     // 切换或重新打开后，旧请求不能更新当前笔记的保存基准。
     if (currentId.value === noteId && savedSnap.value === baseline) savedSnap.value = payload
-    await loadList()
     ElMessage.success('已保存')
+    try { await loadList() } catch (e) { ElMessage.warning(`笔记已保存，列表刷新失败：${(e as Error).message}`) }
     return true
   } catch (e) {
+    if (currentId.value === noteId && savedSnap.value === baseline) saveError.value = (e as Error).message
     ElMessage.error(`保存失败：${(e as Error).message}`)
     return false
   } finally {
@@ -451,6 +456,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
     <main class="editor-pane" v-loading="loading">
       <div v-show="currentId !== null" class="editor-wrap">
         <div class="editor-toolbar">
+          <span role="status" aria-live="polite" :title="saveError">{{ saveStatus }}</span>
           <el-input v-model="title" placeholder="笔记标题" style="max-width: 320px" size="default">
             <template #append>
               <el-select
@@ -495,7 +501,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
           <el-button :icon="Delete" text type="danger" @click="removeNote">删除</el-button>
           <el-button @click="exportPdf">导出 PDF</el-button>
           <el-button type="primary" :loading="saving" :disabled="!dirty" @click="saveNote">
-            {{ dirty ? '保存' : '已保存' }}
+            {{ saveError ? '重试保存' : dirty ? '保存' : '已保存' }}
           </el-button>
         </div>
         <div ref="editorEl" class="editor" />

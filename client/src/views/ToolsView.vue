@@ -6,8 +6,9 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { Delete, Edit, Plus, Upload } from '@element-plus/icons-vue'
 import { useRoute, useRouter } from 'vue-router'
 import { del, get, post, put, upload } from '../api/http'
+import { useAsyncAction } from '../composables/useAsyncAction'
 import { chartAlertColor, chartBarColor, chartPalette } from '../utils/chartTheme'
-import { pomoData, pomoRunning, pomoPaused, pomoMode, pomoWorkMin, pomoBreakMin, pomoTask, pomoTag, pomoDisplay, loadPomodoro, pomoStart, pomoTogglePause, pomoGiveUp } from '../stores/pomodoro'
+import { pomoData, pomoRunning, pomoPaused, pomoMode, pomoWorkMin, pomoBreakMin, pomoTask, pomoTag, pomoDisplay, loadPomodoro, pomoStart, pomoTogglePause, pomoGiveUp, failedPomoRecords, retryPomoRecord } from '../stores/pomodoro'
 
 // ==================== 工具页布局 ====================
 // 栏目切换由左侧主导航的「日常工具」折叠分组控制，本页只按 ?tab= 渲染对应板块
@@ -102,7 +103,9 @@ function openRunDialog(date: string, checked: boolean) {
   runDlg.value = true
 }
 
+const { pending: runSaving, error: runError, run: runSubmit } = useAsyncAction()
 async function saveRunDialog() {
+  await runSubmit(async () => {
   if (runDlgChecked.value) {
     await put(`/api/runs/checkin/${runDlgDate.value}`, { distanceKm: runDlgKm.value, steps: runDlgSteps.value })
     ElMessage.success('已保存')
@@ -111,7 +114,8 @@ async function saveRunDialog() {
     ElMessage.success('打卡成功')
   }
   runDlg.value = false
-  await loadRuns()
+  try { await loadRuns() } catch (e) { ElMessage.warning(`记录已保存，列表刷新失败：${(e as Error).message}`) }
+  })
 }
 
 async function removeRunDialog() {
@@ -328,20 +332,23 @@ function openCdDialog(item?: Countdown) {
   cdDialogVisible.value = true
 }
 
+const { pending: cdSaving, error: cdError, run: cdSubmit } = useAsyncAction()
 async function saveCd() {
   const f = cdForm.value
   if (!f.title || !f.date) {
     ElMessage.warning('请填写标题和日期')
     return
   }
+  await cdSubmit(async () => {
   if (f.id) {
     await put(`/api/countdowns/${f.id}`, f)
   } else {
     await post('/api/countdowns', f)
   }
   cdDialogVisible.value = false
-  await loadCountdowns()
+  try { await loadCountdowns() } catch (e) { ElMessage.warning(`记录已保存，列表刷新失败：${(e as Error).message}`) }
   ElMessage.success('已保存')
+  })
 }
 
 async function removeCd(item: Countdown) {
@@ -622,16 +629,19 @@ function openScoreDialog() {
   scoreDialogVisible.value = true
 }
 
+const { pending: scoreSaving, error: scoreError, run: scoreSubmit } = useAsyncAction()
 async function saveScore() {
   const f = scoreForm.value
   if (!f.semester || !f.courseName) {
     ElMessage.warning('请填写学期与课程名')
     return
   }
+  await scoreSubmit(async () => {
   await post('/api/scores', f)
   scoreDialogVisible.value = false
-  await loadScores()
+  try { await loadScores() } catch (e) { ElMessage.warning(`记录已保存，列表刷新失败：${(e as Error).message}`) }
   ElMessage.success('已录入')
+  })
 }
 
 async function removeScore(r: ScoreRow) {
@@ -752,7 +762,7 @@ function onWindowResize() {
       </div>
 
       <!-- 打卡/编辑记录弹窗 -->
-      <el-dialog v-model="runDlg" :title="runDlgChecked ? `编辑 ${runDlgDate} 的记录` : `补打卡 · ${runDlgDate}`" width="380px">
+      <el-dialog v-model="runDlg" :show-close="!runSaving" :close-on-click-modal="!runSaving" :close-on-press-escape="!runSaving" :title="runDlgChecked ? `编辑 ${runDlgDate} 的记录` : `补打卡 · ${runDlgDate}`" width="380px">
         <div class="run-dlg-form">
           <div class="run-dlg-row">
             <span class="run-dlg-label">里程（km）</span>
@@ -766,8 +776,8 @@ function onWindowResize() {
         </div>
         <template #footer>
           <el-button v-if="runDlgChecked" type="danger" text @click="removeRunDialog">撤销打卡</el-button>
-          <el-button @click="runDlg = false">取消</el-button>
-          <el-button type="primary" @click="saveRunDialog">{{ runDlgChecked ? '保存' : '打卡' }}</el-button>
+          <el-button :disabled="runSaving" @click="runDlg = false">取消</el-button>
+          <el-button type="primary" :loading="runSaving" @click="saveRunDialog">{{ runDlgChecked ? '保存' : '打卡' }}</el-button>
         </template>
       </el-dialog>
 
@@ -867,6 +877,10 @@ function onWindowResize() {
 
       <div v-show="activeTab === 'pomodoro'" class="tab-block pomo-panel">
         <!-- 专注态：只留钟表，居中于内容区（开始/结束时与常规布局做一镜到底 morph） -->
+        <el-alert v-for="entry in failedPomoRecords" :key="entry.payload.startedAt" type="error" :closable="false" style="margin-bottom: 12px">
+          <p>{{ entry.payload.taskLabel || '未命名专注' }} · {{ entry.payload.durationMin }} 分钟未保存：{{ entry.error }}</p>
+          <el-button :loading="entry.saving" @click="retryPomoRecord(entry)">重试保存记录</el-button>
+        </el-alert>
         <div v-if="pomoRunning" class="pomo-focus">
           <div class="pomo-circle" :class="{ running: pomoRunning, break: pomoMode === 'break' }">
             <div class="pomo-time">{{ pomoDisplay }}</div>
@@ -943,8 +957,9 @@ function onWindowResize() {
   </div>
 
     <!-- 倒计日对话框 -->
-    <el-dialog v-model="cdDialogVisible" :title="cdForm.id ? '编辑倒计日' : '添加倒计日'" width="400px">
-      <el-form label-width="70px">
+    <el-dialog v-model="cdDialogVisible" :show-close="!cdSaving" :close-on-click-modal="!cdSaving" :close-on-press-escape="!cdSaving" :title="cdForm.id ? '编辑倒计日' : '添加倒计日'" width="400px">
+      <el-alert v-if="cdError" :title="cdError" type="error" :closable="false" style="margin-bottom: 12px" />
+      <el-form :disabled="cdSaving" label-width="70px">
         <el-form-item label="标题">
           <el-input v-model="cdForm.title" placeholder="如：高数期末考试" />
         </el-form-item>
@@ -958,14 +973,15 @@ function onWindowResize() {
         </el-form-item>
       </el-form>
       <template #footer>
-        <el-button @click="cdDialogVisible = false">取消</el-button>
-        <el-button type="primary" @click="saveCd">保存</el-button>
+        <el-button :disabled="cdSaving" @click="cdDialogVisible = false">取消</el-button>
+        <el-button type="primary" :loading="cdSaving" @click="saveCd">保存</el-button>
       </template>
     </el-dialog>
 
     <!-- 录入成绩对话框 -->
-    <el-dialog v-model="scoreDialogVisible" title="录入成绩" width="400px">
-      <el-form label-width="70px">
+    <el-dialog v-model="scoreDialogVisible" :show-close="!scoreSaving" :close-on-click-modal="!scoreSaving" :close-on-press-escape="!scoreSaving" title="录入成绩" width="400px">
+      <el-alert v-if="scoreError" :title="scoreError" type="error" :closable="false" style="margin-bottom: 12px" />
+      <el-form :disabled="scoreSaving" label-width="70px">
         <el-form-item label="学期">
           <el-input v-model="scoreForm.semester" placeholder="如：2026-2027第1学期" />
         </el-form-item>
@@ -981,8 +997,8 @@ function onWindowResize() {
         </el-form-item>
       </el-form>
       <template #footer>
-        <el-button @click="scoreDialogVisible = false">取消</el-button>
-        <el-button type="primary" @click="saveScore">保存</el-button>
+        <el-button :disabled="scoreSaving" @click="scoreDialogVisible = false">取消</el-button>
+        <el-button type="primary" :loading="scoreSaving" @click="saveScore">保存</el-button>
       </template>
     </el-dialog>
 </template>
