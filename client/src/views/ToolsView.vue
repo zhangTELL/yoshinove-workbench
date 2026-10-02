@@ -7,6 +7,7 @@ import { Delete, Edit, Plus, Upload } from '@element-plus/icons-vue'
 import { useRoute, useRouter } from 'vue-router'
 import { del, get, post, put, upload } from '../api/http'
 import { useAsyncAction } from '../composables/useAsyncAction'
+import { useRememberedSelection } from '../composables/useRememberedSelection'
 import { chartAlertColor, chartBarColor, chartPalette } from '../utils/chartTheme'
 import { pomoData, pomoRunning, pomoPaused, pomoMode, pomoWorkMin, pomoBreakMin, pomoTask, pomoTag, pomoDisplay, loadPomodoro, pomoStart, pomoTogglePause, pomoGiveUp, failedPomoRecords, retryPomoRecord } from '../stores/pomodoro'
 
@@ -377,7 +378,9 @@ const scoreData = ref<ScoreData | null>(null)
 const scoreDialogVisible = ref(false)
 const scoreForm = ref({ semester: '', courseName: '', credit: 2, score: 90 })
 
-const scoreSemesterFilter = ref('全部')
+const scoreSemesterFilter = useRememberedSelection('wb.scores.semester', '全部',
+  (value): value is string => typeof value === 'string' && value.length > 0,
+)
 const scoreSemesters = computed(() => ['全部', ...(scoreData.value?.semesters.map((s) => s.semester) ?? [])])
 const scoreFiltered = computed(() =>
   !scoreData.value || scoreSemesterFilter.value === '全部'
@@ -388,7 +391,9 @@ const scoreFiltered = computed(() =>
 // ===== 成绩分析（Excel 导入 + 范围切换 + 图表）=====
 const importingScore = ref(false)
 const scoreFileInput = ref<HTMLInputElement>()
-const scoreScope = ref<'current' | 'year' | 'all'>('all')
+const scoreScope = useRememberedSelection<'current' | 'year' | 'all'>('wb.scores.scope', 'all',
+  (value): value is 'current' | 'year' | 'all' => value === 'current' || value === 'year' || value === 'all',
+)
 const currentSemesterName = ref('')
 const currentYear = ref('')
 const distChartEl = ref<HTMLDivElement>()
@@ -622,6 +627,10 @@ function onScoreSemesterChange() {
 
 async function loadScores() {
   scoreData.value = await get<ScoreData>('/api/scores')
+  if (!scoreSemesters.value.includes(scoreSemesterFilter.value)) {
+    scoreSemesterFilter.value = '全部'
+    scoreScope.value = 'all'
+  }
 }
 
 function openScoreDialog() {

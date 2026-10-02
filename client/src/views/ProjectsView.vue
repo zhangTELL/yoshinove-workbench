@@ -4,6 +4,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { Delete, Document, Edit, FolderAdd, FolderOpened, More, Plus, Refresh, Search, Star, StarFilled } from '@element-plus/icons-vue'
 import { del, get, patch, post, put } from '../api/http'
 import ProjectFiles from '../components/ProjectFiles.vue'
+import { useRememberedSelection } from '../composables/useRememberedSelection'
 
 interface Project {
   id: number
@@ -86,7 +87,9 @@ const scanStatus = ref<ScanStatus | null>(null)
 
 // 筛选
 const q = ref('')
-const activeCategory = ref<'all' | 'none' | number>('all')
+const activeCategory = useRememberedSelection<'all' | 'none' | number>('wb.projects.category', 'all',
+  (value): value is 'all' | 'none' | number => value === 'all' || value === 'none' || (typeof value === 'number' && Number.isSafeInteger(value) && value > 0),
+)
 const favOnly = ref(false)
 const gitOnly = ref(false)
 const aiOnly = ref(false)
@@ -282,6 +285,9 @@ async function loadCategories() {
     const r = await get<{ list: Category[]; uncategorized: number }>('/api/projects/categories')
     categories.value = r.list
     uncategorized.value = r.uncategorized
+    if (typeof activeCategory.value === 'number' && !r.list.some((category) => category.id === activeCategory.value)) {
+      activeCategory.value = 'all'
+    }
   } catch {
     categories.value = []
   }
@@ -330,7 +336,8 @@ function clearFilters() {
 onUnmounted(() => { ++listSeq; window.clearTimeout(searchTimer) })
 
 async function refresh() {
-  await Promise.all([loadCategories(), loadList()])
+  await loadCategories()
+  await loadList()
 }
 
 /**
@@ -342,7 +349,7 @@ async function refreshStacks() {
   refreshingStacks.value = true
   try {
     const r = await post<{ total: number; changed: number; missing: number }>('/api/projects/refresh-stacks')
-    await Promise.all([loadCategories(), loadList()])
+    await refresh()
     // 当前筛选的那个技术栈可能已经不存在了，别让列表停在空结果上
     if (stackFilter.value && !(data.value?.stacks ?? []).includes(stackFilter.value)) {
       stackFilter.value = ''
