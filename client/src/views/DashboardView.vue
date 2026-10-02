@@ -1,13 +1,14 @@
 <script setup lang="ts">
 import type { ChaoxingHomework, Course, CourseSession, ScheduleSwap, SectionTime, Semester, WeekParity } from '@wb/shared'
 import { resolveDate, swapMapOf, termOf } from '@wb/shared'
-import { computed, nextTick, onMounted, ref } from 'vue'
+import { computed, nextTick, onMounted, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import type { InputInstance } from 'element-plus'
 import { ElMessage } from 'element-plus'
 import { Check, Edit, Refresh } from '@element-plus/icons-vue'
 import { get, post } from '../api/http'
 import AppIcon from '../components/AppIcon.vue'
+import CardLoadStatus from '../components/CardLoadStatus.vue'
 import { DEFAULT_NAME, displayName, NAME_MAX, saveDisplayName } from '../stores/profile'
 import type { IconKey } from '../utils/themeIcons'
 import { themedIcon } from '../utils/themeIcons'
@@ -19,7 +20,7 @@ import { themedIcon } from '../utils/themeIcons'
  *   倒计日   ← /api/countdowns
  *   健康跑   ← /api/runs（+/api/runs/checkin 快捷打卡）
  *   低余额   ← /api/ai/balance（仅在低于阈值时显示，失败静默）
- * 每个请求各自兜错：单模块数据挂了只该空掉自己那张卡，不能让整页白屏。
+ * 各模块独立加载，失败时保留上次成功数据并提供重试。
  */
 
 interface Countdown {
@@ -122,6 +123,42 @@ const countdowns = ref<Countdown[]>([])
 const runs = ref<RunsView | null>(null)
 const lowBalances = ref<{ name: string; available: number; currency: string }[]>([])
 const checking = ref(false)
+const homeworkConfigured = ref(false)
+const cardStates = reactive({
+  schedule: { loading: false, error: '', at: '' },
+  homework: { loading: false, error: '', at: '' },
+  countdown: { loading: false, error: '', at: '' },
+  runs: { loading: false, error: '', at: '' },
+  balance: { loading: false, error: '', at: '' },
+})
+type CardKey = keyof typeof cardStates
+function ready(key: CardKey) { const state = cardStates[key]; return !!state.at && !state.loading && !state.error }
+async function refreshCard(key: CardKey) {
+  const state = cardStates[key]
+  if (state.loading) return
+  state.loading = true
+  state.error = ''
+  try {
+    if (key === 'schedule') {
+      const sem = await get<Semester[]>('/api/semesters')
+      const current = sem.find((item) => item.isCurrent) ?? sem[0]
+      const sch = current ? await get<SchedulePayload>(`/api/schedule?semesterId=${current.id}`) : { courses: [], sessions: [], swaps: [] }
+      semesters.value = sem
+      courses.value = sch.courses
+      sessions.value = sch.sessions
+      swaps.value = sch.swaps ?? []
+    } else if (key === 'homework') {
+      const status = await get<{ hasCookie: boolean }>('/api/chaoxing/status')
+      const items = status.hasCookie ? await get<ChaoxingHomework[]>('/api/chaoxing/homework') : []
+      homeworkConfigured.value = status.hasCookie
+      homework.value = items
+    } else if (key === 'countdown') countdowns.value = await get<Countdown[]>('/api/countdowns')
+    else if (key === 'runs') runs.value = await get<RunsView>('/api/runs')
+    else await loadLowBalance()
+    state.at = new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+  } catch (e) { state.error = (e as Error).message }
+  finally { state.loading = false }
+}
 
 /** 当前学期：优先 isCurrent，否则取第一个 */
 const semester = computed(() => semesters.value.find((s) => s.isCurrent) ?? semesters.value[0] ?? null)
@@ -347,13 +384,7 @@ async function checkinToday() {
   }
 }
 
-async function loadRuns() {
-  try {
-    runs.value = await get<RunsView>('/api/runs')
-  } catch {
-    runs.value = null
-  }
-}
+async function loadRuns() { await refreshCard('runs') }
 
 // ==================== 快捷入口 ====================
 /**
@@ -418,42 +449,14 @@ async function loadLowBalance() {
       }
     }
     lowBalances.value = out
-  } catch {
-    lowBalances.value = []
-  }
+  } catch (e) { throw e }
 }
 
 async function loadAll() {
+  if (loading.value && refreshedAt.value) return
   loading.value = true
   now.value = new Date()
-  // 各自兜错：某个接口挂掉只空掉对应卡片
-  const [sem, hw, cds] = await Promise.allSettled([
-    get<Semester[]>('/api/semesters'),
-    get<ChaoxingHomework[]>('/api/chaoxing/homework'),
-    get<Countdown[]>('/api/countdowns'),
-  ])
-  semesters.value = sem.status === 'fulfilled' ? (sem.value ?? []) : []
-  homework.value = hw.status === 'fulfilled' ? (hw.value ?? []) : []
-  countdowns.value = cds.status === 'fulfilled' ? (cds.value ?? []) : []
-
-  const sid = semester.value?.id
-  if (sid) {
-    try {
-      const sch = await get<SchedulePayload>(`/api/schedule?semesterId=${sid}`)
-      courses.value = sch.courses ?? []
-      sessions.value = sch.sessions ?? []
-      swaps.value = sch.swaps ?? []
-    } catch {
-      courses.value = []
-      sessions.value = []
-      swaps.value = []
-    }
-  } else {
-    courses.value = []
-    sessions.value = []
-  }
-
-  await Promise.all([loadRuns(), loadLowBalance()])
+  await Promise.all((Object.keys(cardStates) as CardKey[]).map(refreshCard))
   refreshedAt.value = hhmm.value
   loading.value = false
 }
@@ -462,7 +465,7 @@ onMounted(loadAll)
 </script>
 
 <template>
-  <div v-loading="loading" class="page">
+  <div class="page">
     <!-- ==================== 问候 + 今日概览 ==================== -->
     <section class="hero">
       <div class="hero-main">
@@ -496,29 +499,30 @@ onMounted(loadAll)
             <span class="dot">·</span> 第 {{ currentWeek }} / {{ totalWeeks }} 周
             <span class="dot">·</span> {{ semester.name }}
           </template>
-          <template v-else><span class="dot">·</span> 还没有学期，先去课表新建一个</template>
+          <template v-else-if="ready('schedule')"><span class="dot">·</span> 还没有学期，先去课表新建一个</template>
         </div>
       </div>
 
       <div class="hero-stats">
         <div class="hs">
-          <div class="hs-num">{{ todayItems.length }}</div>
+          <div class="hs-num">{{ cardStates.schedule.at ? todayItems.length : '—' }}</div>
           <div class="hs-label">今日课程</div>
         </div>
         <div class="hs">
-          <div class="hs-num" :class="{ warn: pendingHomework.length > 0 }">{{ pendingHomework.length }}</div>
+          <div class="hs-num" :class="{ warn: pendingHomework.length > 0 }">{{ cardStates.homework.at && homeworkConfigured ? pendingHomework.length : '—' }}</div>
           <div class="hs-label">待交作业</div>
         </div>
         <div class="hs">
-          <div class="hs-num">{{ runs?.streak ?? 0 }}</div>
+          <div class="hs-num">{{ runs?.streak ?? '—' }}</div>
           <div class="hs-label">连续跑步（天）</div>
         </div>
-        <el-button class="hero-refresh" size="small" :icon="Refresh" text @click="loadAll">
+        <el-button class="hero-refresh" :loading="loading" size="small" :icon="Refresh" text @click="loadAll">
           {{ refreshedAt ? `${refreshedAt} 刷新` : '刷新' }}
         </el-button>
       </div>
     </section>
 
+    <CardLoadStatus v-if="cardStates.balance.error" :state="cardStates.balance" @retry="refreshCard('balance')" />
     <el-alert
       v-if="lowBalances.length"
       type="warning"
@@ -545,6 +549,7 @@ onMounted(loadAll)
               <el-button size="small" text @click="go('/schedule')">查看课表</el-button>
             </div>
           </template>
+          <CardLoadStatus :state="cardStates.schedule" @retry="refreshCard('schedule')" />
 
           <div v-if="todayItems.length" class="cls-list">
             <div v-for="it in todayItems" :key="it.id" class="cls-item" :class="{ done: it.state === '已下课', now: it.state === '上课中' }">
@@ -566,8 +571,8 @@ onMounted(loadAll)
             </div>
           </div>
 
-          <div v-else class="empty-block">
-            <div class="empty-title">今天没有课 🎉</div>
+          <div v-else-if="ready('schedule')" class="empty-block">
+            <div class="empty-title">{{ !semester ? '尚未配置学期' : !sessions.length ? '尚未添加课程' : '今天没有课 🎉' }}</div>
             <div v-if="nextCourse" class="empty-next">
               <span class="en-label">{{ nextCourse.label }}</span>
               <span class="en-name">{{ nextCourse.name }}</span>
@@ -589,16 +594,17 @@ onMounted(loadAll)
               <el-button size="small" text @click="go('/tools?tab=runs')">统计</el-button>
             </div>
           </template>
-          <div class="run-main">
+          <CardLoadStatus :state="cardStates.runs" @retry="refreshCard('runs')" />
+          <div v-if="runs" class="run-main">
             <div class="run-state" :class="{ ok: runs?.today }">
               {{ runs?.today ? '今天已打卡' : '今天还没打卡' }}
             </div>
-            <el-button v-if="runs && !runs.today" type="primary" size="small" :icon="Check" :loading="checking" @click="checkinToday">
+            <el-button v-if="runs && !runs.today && ready('runs')" type="primary" size="small" :icon="Check" :loading="checking" @click="checkinToday">
               立即打卡
             </el-button>
             <div v-else-if="!runs" class="run-tip">暂时读不到数据</div>
           </div>
-          <div class="run-stats">
+          <div v-if="runs" class="run-stats">
             <div class="rs"><span class="rs-num">{{ runs?.streak ?? 0 }}</span><span class="rs-label">连续天数</span></div>
             <div class="rs"><span class="rs-num">{{ runs?.weekCount ?? 0 }}</span><span class="rs-label">本周</span></div>
             <div class="rs"><span class="rs-num">{{ runs?.monthCount ?? 0 }}</span><span class="rs-label">本月</span></div>
@@ -617,6 +623,7 @@ onMounted(loadAll)
               <el-button size="small" text @click="go('/tools?tab=countdown')">管理</el-button>
             </div>
           </template>
+          <CardLoadStatus :state="cardStates.countdown" @retry="refreshCard('countdown')" />
           <div v-if="countdownShown.length" class="cd-list">
             <div v-for="c in countdownShown" :key="c.id" class="cd-item" @click="go('/tools?tab=countdown')">
               <div class="cd-days">
@@ -629,7 +636,7 @@ onMounted(loadAll)
               </div>
             </div>
           </div>
-          <div v-else class="empty-block">
+          <div v-else-if="ready('countdown')" class="empty-block">
             <div class="empty-title">没有临近的倒计日</div>
             <div class="empty-tip">到「日常工具 → 倒计日」可以加上考试、报名截止这类重要日子</div>
           </div>
@@ -643,6 +650,7 @@ onMounted(loadAll)
               <el-button size="small" text @click="go('/chaoxing')">去学习通</el-button>
             </div>
           </template>
+          <CardLoadStatus :state="cardStates.homework" @retry="refreshCard('homework')" />
           <div class="hw-list">
             <a v-for="h in homeworkShown" :key="h.id" class="hw-item" :href="h.url" target="_blank" rel="noreferrer">
               <div class="hw-body">
@@ -658,11 +666,11 @@ onMounted(loadAll)
           <div v-if="pendingHomework.length > homeworkShown.length" class="hw-more">
             共 {{ pendingHomework.length }} 项待办，去「学习通作业」查看全部
           </div>
-          <div v-if="!homeworkShown.length" class="empty-block">
-            <div class="empty-title">本学期没有未提交的作业 🎉</div>
+          <div v-if="!homeworkShown.length && ready('homework')" class="empty-block">
+            <div class="empty-title">{{ homeworkConfigured ? '本学期没有未提交的作业 🎉' : '尚未配置学习通账号' }}</div>
             <div class="empty-tip">
               <template v-if="hiddenOtherTerm">另有 {{ hiddenOtherTerm }} 项往期或已结束课程的作业没有显示（在「学习通作业」能看到全部）；</template>
-              点右上角「去学习通」可以手动同步一次
+              {{ homeworkConfigured ? '点右上角「去学习通」可以手动同步一次' : '去学习通页面配置账号后，即可查看待办作业' }}
             </div>
           </div>
 
