@@ -317,11 +317,12 @@ export const scheduleRoutes: FastifyPluginAsync = async (app) => {
     if (sem) {
       validateSessionFields(
         {
-          weekday: b.weekday ?? row.weekday,
-          startSection: b.startSection ?? row.startSection,
-          endSection: b.endSection ?? row.endSection,
-          weeks: b.weeks ?? (JSON.parse(row.weeks) as number[]),
-          weekParity: b.weekParity ?? row.weekParity,
+          // 只有缺省字段沿用原值，显式 null 必须参与校验。
+          weekday: b.weekday === undefined ? row.weekday : b.weekday,
+          startSection: b.startSection === undefined ? row.startSection : b.startSection,
+          endSection: b.endSection === undefined ? row.endSection : b.endSection,
+          weeks: b.weeks === undefined ? (JSON.parse(row.weeks) as number[]) : b.weeks,
+          weekParity: b.weekParity === undefined ? row.weekParity : b.weekParity,
         },
         { maxSections: (JSON.parse(sem.sectionTimes) as unknown[]).length, maxWeeks: sem.totalWeeks },
       )
