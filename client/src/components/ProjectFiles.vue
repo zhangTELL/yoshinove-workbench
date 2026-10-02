@@ -475,8 +475,8 @@ async function confirmBeforeSwitch(): Promise<boolean> {
       cancelButtonText: '放弃修改',
       type: 'warning',
     })
-    // 「保存并切换」：保存失败（网络/校验）就不能切，否则改动无声丢失
-    return await save()
+    // 保存失败或保存期间继续输入，都保留当前文件和未保存草稿。
+    return (await save()) && !dirty.value
   } catch (action) {
     return action === 'cancel' // cancelButtonText = 放弃修改 → 放行；Esc / × = 取消
   }
