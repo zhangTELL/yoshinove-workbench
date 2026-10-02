@@ -668,6 +668,7 @@ const pomoProgress = computed(() => {
   return (pomoElapsed.value / total) * 100
 })
 const pomoMaxDaily = computed(() => Math.max(60, ...(pomoData.value?.daily ?? []).map((d) => d.minutes)))
+const pomoHasDaily = computed(() => (pomoData.value?.daily ?? []).some((d) => d.minutes > 0))
 
 async function loadPomodoro() {
   pomoData.value = await get<PomodoroData>('/api/pomodoro?days=14')
@@ -971,7 +972,7 @@ function onWindowResize() {
         </el-table>
       </div>
 
-      <div v-show="activeTab === 'pomodoro'" class="tab-block">
+      <div v-show="activeTab === 'pomodoro'" class="tab-block pomo-panel">
         <!-- 专注态：只留钟表，居中于内容区（开始/结束时与常规布局做一镜到底 morph） -->
         <div v-if="pomoRunning" class="pomo-focus">
           <div class="pomo-circle" :class="{ running: pomoRunning, break: pomoMode === 'break' }">
@@ -985,38 +986,64 @@ function onWindowResize() {
             <el-button type="warning" size="large" round @click="pomoGiveUp">结束并记录</el-button>
           </div>
         </div>
-        <div v-else class="pomo-layout">
-          <div class="pomo-left">
-            <div class="pomo-circle" :class="{ running: pomoRunning, break: pomoMode === 'break' }">
-              <div class="pomo-time">{{ pomoDisplay }}</div>
-              <div class="pomo-mode">{{ pomoRunning ? (pomoMode === 'work' ? '专注中' : '休息中') : '准备就绪' }}</div>
-            </div>
-            <div class="pomo-controls">
-              <el-button type="primary" size="large" round @click="pomoStart">开始专注</el-button>
-            </div>
-          </div>
-          <div class="pomo-right">
-            <el-form label-width="70px" style="max-width: 380px">
-              <el-form-item label="在做啥">
-                <el-input v-model="pomoTask" placeholder="如：写数据结构实验报告" />
-              </el-form-item>
-              <el-form-item label="课程">
-                <el-input v-model="pomoTag" placeholder="可选，如：数据结构" />
-              </el-form-item>
-              <el-form-item label="时长">
-                专注 <el-input-number v-model="pomoWorkMin" :min="5" :max="120" size="small" /> 分钟
-                · 休息 <el-input-number v-model="pomoBreakMin" :min="3" :max="30" size="small" /> 分钟
-              </el-form-item>
-            </el-form>
-            <div class="pomo-today">今日专注 {{ pomoData?.todayMin ?? 0 }} 分钟 🍅</div>
-            <div class="pomo-bars">
-              <div v-for="d in (pomoData?.daily ?? []).slice(-14)" :key="d.date" class="pomo-bar-col" :title="`${d.date}：${d.minutes} 分钟`">
-                <div class="pomo-bar" :style="{ height: `${Math.max(2, (d.minutes / pomoMaxDaily) * 80)}px` }" />
-                <div class="pomo-bar-label">{{ d.date.slice(8) }}</div>
+        <template v-else>
+          <div class="pomo-layout">
+            <div class="pomo-left">
+              <div class="pomo-circle" :class="{ running: pomoRunning, break: pomoMode === 'break' }">
+                <div class="pomo-time">{{ pomoDisplay }}</div>
+                <div class="pomo-mode">{{ pomoRunning ? (pomoMode === 'work' ? '专注中' : '休息中') : '准备就绪' }}</div>
+              </div>
+              <div class="pomo-controls">
+                <el-button type="primary" size="large" round @click="pomoStart">开始专注</el-button>
               </div>
             </div>
+            <div class="pomo-right">
+              <el-form label-width="70px">
+                <el-form-item label="在做啥">
+                  <el-input v-model="pomoTask" placeholder="如：写数据结构实验报告" />
+                </el-form-item>
+                <el-form-item label="课程">
+                  <el-input v-model="pomoTag" placeholder="可选，如：数据结构" />
+                </el-form-item>
+                <el-form-item label="时长">
+                  <div class="pomo-durations">
+                    <div class="pomo-duration">专注 <el-input-number v-model="pomoWorkMin" :min="5" :max="120" size="small" /> 分钟</div>
+                    <div class="pomo-duration">休息 <el-input-number v-model="pomoBreakMin" :min="3" :max="30" size="small" /> 分钟</div>
+                  </div>
+                </el-form-item>
+              </el-form>
+              <div class="pomo-today">今日专注 {{ pomoData?.todayMin ?? 0 }} 分钟 🍅</div>
+            </div>
           </div>
-        </div>
+          <div class="pomo-stats">
+            <section>
+              <h3 class="pomo-stat-title">近两周专注</h3>
+              <div v-if="pomoHasDaily" class="pomo-bars">
+                <div v-for="d in (pomoData?.daily ?? []).slice(-14)" :key="d.date" class="pomo-bar-col" :title="`${d.date}：${d.minutes} 分钟`">
+                  <div class="pomo-bar" :style="{ height: `${Math.max(2, (d.minutes / pomoMaxDaily) * 80)}px` }" />
+                  <div class="pomo-bar-label">{{ d.date.slice(8) }}</div>
+                </div>
+              </div>
+              <p v-else class="pomo-empty">完成第一次专注后，这里会显示近两周的统计</p>
+            </section>
+            <section>
+              <h3 class="pomo-stat-title">最近专注</h3>
+              <ul v-if="pomoData?.recent.length" class="pomo-recent">
+                <li v-for="r in pomoData.recent.slice(0, 3)" :key="r.id">
+                  <div class="pomo-record-main">
+                    <div class="pomo-record-task">{{ r.taskLabel || '未命名专注' }}</div>
+                    <div class="pomo-record-meta">
+                      <span v-if="r.courseTag">{{ r.courseTag }} · </span>
+                      <time :datetime="r.startedAt">{{ new Date(r.startedAt).toLocaleDateString('zh-CN') }}</time>
+                    </div>
+                  </div>
+                  <span class="pomo-record-minutes">{{ r.durationMin }} 分钟</span>
+                </li>
+              </ul>
+              <p v-else class="pomo-empty">还没有专注记录，开始一个番茄吧</p>
+            </section>
+          </div>
+        </template>
       </div>
     </section>
   </div>
@@ -1313,11 +1340,36 @@ function onWindowResize() {
 .cd-del:hover {
   color: var(--el-color-danger);
 }
+.pomo-panel {
+  max-width: 1040px;
+  box-sizing: border-box;
+  margin-inline: auto;
+  padding: 24px;
+  container-type: inline-size;
+}
 .pomo-layout {
-  display: flex;
-  gap: 40px;
+  display: grid;
+  grid-template-columns: 220px minmax(0, 1fr);
+  gap: 32px;
   align-items: center;
+  max-width: 800px;
+  margin-inline: auto;
+}
+.pomo-right {
+  min-width: 0;
+}
+.pomo-durations {
+  display: flex;
+  gap: 12px 20px;
   flex-wrap: wrap;
+}
+.pomo-duration {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.pomo-duration :deep(.el-input-number) {
+  width: 104px;
 }
 .pomo-left {
   text-align: center;
@@ -1389,6 +1441,59 @@ function onWindowResize() {
   font-weight: 600;
   color: var(--el-text-color-primary);
 }
+.pomo-stats {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 24px;
+  margin-top: 24px;
+  padding-top: 20px;
+  border-top: 1px solid var(--el-border-color-light);
+}
+.pomo-stat-title {
+  margin: 0 0 12px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--el-text-color-primary);
+}
+.pomo-empty {
+  margin: 0;
+  padding: 12px 0;
+  line-height: 1.6;
+  font-size: 13px;
+  color: var(--el-text-color-secondary);
+}
+.pomo-recent {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.pomo-recent li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 0;
+}
+.pomo-record-main {
+  min-width: 0;
+}
+.pomo-record-task {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13px;
+  color: var(--el-text-color-primary);
+}
+.pomo-record-meta {
+  margin-top: 4px;
+  font-size: 12px;
+  color: var(--el-text-color-secondary);
+}
+.pomo-record-minutes {
+  flex-shrink: 0;
+  font-size: 13px;
+  color: var(--el-text-color-primary);
+}
 .pomo-bars {
   display: flex;
   align-items: flex-end;
@@ -1396,6 +1501,8 @@ function onWindowResize() {
   height: 110px;
 }
 .pomo-bar-col {
+  flex: 1;
+  min-width: 0;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -1403,7 +1510,8 @@ function onWindowResize() {
   height: 100%;
 }
 .pomo-bar {
-  width: 18px;
+  width: 70%;
+  max-width: 24px;
   background: var(--el-color-primary);
   border-radius: var(--wb-radius-small) 3px 0 0;
   min-height: 2px;
@@ -1412,6 +1520,16 @@ function onWindowResize() {
   font-size: 10px;
   color: var(--el-text-color-disabled);
   margin-top: 4px;
+}
+@container (max-width: 620px) {
+  .pomo-layout {
+    grid-template-columns: minmax(0, 1fr);
+    max-width: 480px;
+    gap: 24px;
+  }
+  .pomo-stats {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }
 .form-tip {
   margin-left: 10px;

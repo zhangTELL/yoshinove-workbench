@@ -242,8 +242,8 @@ async function removeHomework(h: Homework) {
 <template>
   <div v-loading="loading" class="page">
     <!-- Cookie 配置 -->
-    <el-card>
-      <template #header>
+    <el-card class="account-card">
+      <template v-if="!status?.hasCookie" #header>
         <div class="card-head">
           <span>学习通账号</span>
           <el-tag v-if="status?.hasCookie" type="success" size="small">已配置 UID:{{ status.uid }}</el-tag>
@@ -263,87 +263,93 @@ async function removeHomework(h: Homework) {
       </template>
       <template v-else>
         <div class="status-row">
+          <span class="account-title">学习通账号</span>
+          <el-tag type="success" size="small">已配置 UID:{{ status.uid }}</el-tag>
           <span v-if="status.lastSync">上次同步：{{ fmtSync(status.lastSync) }}</span>
           <span>共 {{ status.total }} 条作业</span>
-          <el-button type="primary" :icon="Refresh" :loading="syncing" @click="sync">立即同步</el-button>
-          <el-button text type="danger" @click="removeCookie">删除 Cookie</el-button>
+          <div class="account-actions">
+            <el-button type="primary" :icon="Refresh" :loading="syncing" @click="sync">立即同步</el-button>
+            <el-button text type="danger" @click="removeCookie">删除 Cookie</el-button>
+          </div>
         </div>
       </template>
     </el-card>
 
-    <!-- 提醒设置 -->
-    <el-card>
-      <template #header>截止提醒</template>
-      <el-form label-width="100px">
-        <el-form-item label="提前提醒">
-          <el-checkbox-group v-model="remindBefore">
-            <el-checkbox-button v-for="o in REMIND_OPTIONS" :key="o.value" :value="o.value">{{ o.label }}</el-checkbox-button>
-          </el-checkbox-group>
-        </el-form-item>
-        <el-form-item label="提醒通道">
-          <el-checkbox-group v-model="channels">
-            <el-checkbox-button v-for="o in CHANNEL_OPTIONS" :key="o.value" :value="o.value">{{ o.label }}</el-checkbox-button>
-          </el-checkbox-group>
-        </el-form-item>
-        <el-form-item label="自动同步">
-          <el-select v-model="autoSyncMin" style="width: 200px">
-            <el-option v-for="o in AUTO_SYNC_OPTIONS" :key="o.value" :value="o.value" :label="o.label" />
-          </el-select>
-        </el-form-item>
-        <el-form-item>
-          <el-button type="primary" :loading="savingSettings" @click="saveRemindSettings">保存提醒设置</el-button>
-        </el-form-item>
-      </el-form>
-    </el-card>
+    <div class="workspace">
+      <!-- 作业列表 -->
+      <el-card class="homework-card">
+        <template #header>
+          <div class="card-head">
+            <div class="homework-filters">
+              <span>作业列表</span>
+              <el-radio-group v-model="filterStatus" size="small">
+                <el-radio-button value="进行中">未提交</el-radio-button>
+                <el-radio-button value="已提交">已提交</el-radio-button>
+                <el-radio-button value="全部">全部</el-radio-button>
+              </el-radio-group>
+              <el-radio-group v-model="semesterFilter" size="small">
+                <el-radio-button value="current">本学期</el-radio-button>
+                <el-radio-button value="all">全部学期</el-radio-button>
+              </el-radio-group>
+            </div>
+            <el-select v-model="filterCourse" size="small" class="course-filter">
+              <!-- 「全部」独立在分组之外，分组按开课时间推断的学期划分 -->
+              <el-option label="全部课程" value="全部" />
+              <el-option-group v-for="g in courseGroups" :key="g.label" :label="g.label">
+                <el-option v-for="c in g.items" :key="c" :value="c" :label="c" />
+              </el-option-group>
+            </el-select>
+          </div>
+        </template>
+        <el-empty
+          v-if="!filtered.length"
+          :description="filterStatus === '进行中' ? '没有未提交的作业，太棒了 🎉' : '当前筛选条件下没有作业'"
+        />
+        <div v-else class="hw-list">
+          <div v-for="h in filtered" :key="h.id" class="hw-item">
+            <div class="hw-main">
+              <div class="hw-title">
+                <el-tag size="small" type="info">{{ h.courseName }}</el-tag>
+                <span>{{ h.title }}</span>
+                <el-tag v-if="h.status === '已提交'" size="small" type="success">已提交</el-tag>
+              </div>
+              <div class="hw-deadline">
+                <el-tag :type="deadlineInfo(h).type" size="small" effect="plain">{{ deadlineInfo(h).text }}</el-tag>
+              </div>
+            </div>
+            <div class="hw-actions">
+              <el-button v-if="h.url" size="small" text type="primary" @click="openUrl(h.url)">打开作业</el-button>
+              <el-button size="small" text type="danger" :icon="Delete" @click="removeHomework(h)" />
+            </div>
+          </div>
+        </div>
+      </el-card>
 
-    <!-- 作业列表 -->
-    <el-card>
-      <template #header>
-        <div class="card-head">
-          <span>
-            作业列表
-            <el-radio-group v-model="filterStatus" size="small" style="margin-left: 12px">
-              <el-radio-button value="进行中">未提交</el-radio-button>
-              <el-radio-button value="已提交">已提交</el-radio-button>
-              <el-radio-button value="全部">全部</el-radio-button>
-            </el-radio-group>
-            <el-radio-group v-model="semesterFilter" size="small" style="margin-left: 8px">
-              <el-radio-button value="current">本学期</el-radio-button>
-              <el-radio-button value="all">全部学期</el-radio-button>
-            </el-radio-group>
-          </span>
-          <el-select v-model="filterCourse" size="small" style="width: 220px">
-            <!-- 「全部」独立在分组之外，分组按开课时间推断的学期划分 -->
-            <el-option label="全部课程" value="全部" />
-            <el-option-group v-for="g in courseGroups" :key="g.label" :label="g.label">
-              <el-option v-for="c in g.items" :key="c" :value="c" :label="c" />
-            </el-option-group>
-          </el-select>
-        </div>
-      </template>
-      <el-empty
-        v-if="!filtered.length"
-        :description="filterStatus === '进行中' ? '没有未提交的作业，太棒了 🎉' : '当前筛选条件下没有作业'"
-      />
-      <div v-else class="hw-list">
-        <div v-for="h in filtered" :key="h.id" class="hw-item">
-          <div class="hw-main">
-            <div class="hw-title">
-              <el-tag size="small" type="info">{{ h.courseName }}</el-tag>
-              <span>{{ h.title }}</span>
-              <el-tag v-if="h.status === '已提交'" size="small" type="success">已提交</el-tag>
-            </div>
-            <div class="hw-deadline">
-              <el-tag :type="deadlineInfo(h).type" size="small" effect="plain">{{ deadlineInfo(h).text }}</el-tag>
-            </div>
-          </div>
-          <div class="hw-actions">
-            <el-button v-if="h.url" size="small" text type="primary" @click="openUrl(h.url)">打开作业</el-button>
-            <el-button size="small" text type="danger" :icon="Delete" @click="removeHomework(h)" />
-          </div>
-        </div>
-      </div>
-    </el-card>
+      <!-- 提醒设置 -->
+      <el-card class="reminder-card">
+        <template #header>截止提醒</template>
+        <el-form label-position="top" class="reminder-form">
+          <el-form-item label="提前提醒">
+            <el-checkbox-group v-model="remindBefore" class="reminder-options">
+              <el-checkbox v-for="o in REMIND_OPTIONS" :key="o.value" :value="o.value">{{ o.label }}</el-checkbox>
+            </el-checkbox-group>
+          </el-form-item>
+          <el-form-item label="提醒通道">
+            <el-checkbox-group v-model="channels" class="channel-options">
+              <el-checkbox v-for="o in CHANNEL_OPTIONS" :key="o.value" :value="o.value">{{ o.label }}</el-checkbox>
+            </el-checkbox-group>
+          </el-form-item>
+          <el-form-item label="自动同步">
+            <el-select v-model="autoSyncMin">
+              <el-option v-for="o in AUTO_SYNC_OPTIONS" :key="o.value" :value="o.value" :label="o.label" />
+            </el-select>
+          </el-form-item>
+          <el-form-item class="reminder-save">
+            <el-button type="primary" :loading="savingSettings" @click="saveRemindSettings">保存提醒设置</el-button>
+          </el-form-item>
+        </el-form>
+      </el-card>
+    </div>
   </div>
 </template>
 
@@ -352,13 +358,50 @@ async function removeHomework(h: Homework) {
   display: flex;
   flex-direction: column;
   gap: 16px;
-  max-width: 980px;
+  width: 100%;
+  max-width: 1360px;
+  margin-inline: auto;
+  container-type: inline-size;
+}
+.workspace {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 320px;
+  align-items: start;
+  gap: 16px;
+}
+.workspace > .el-card {
+  min-width: 0;
 }
 .card-head {
   display: flex;
   justify-content: space-between;
   align-items: center;
   gap: 10px;
+  flex-wrap: wrap;
+}
+.homework-filters {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.course-filter {
+  width: 200px;
+  max-width: 100%;
+}
+.reminder-options {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  width: 100%;
+}
+.channel-options {
+  display: grid;
+}
+.reminder-form :deep(.el-checkbox) {
+  margin-right: 0;
+}
+.reminder-save {
+  margin-bottom: 0;
 }
 .steps {
   margin: 0 0 12px 18px;
@@ -374,9 +417,20 @@ async function removeHomework(h: Homework) {
 .status-row {
   display: flex;
   align-items: center;
-  gap: 16px;
   color: var(--el-text-color-regular);
   font-size: 13px;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+.account-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--el-text-color-primary);
+}
+.account-actions {
+  display: flex;
+  align-items: center;
+  margin-left: auto;
 }
 .hw-list {
   display: flex;
@@ -403,5 +457,34 @@ async function removeHomework(h: Homework) {
   display: flex;
   align-items: center;
   flex-shrink: 0;
+}
+@container (max-width: 980px) {
+  .workspace {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .reminder-form {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    column-gap: 24px;
+  }
+  .reminder-save {
+    align-self: end;
+    margin-bottom: 18px;
+  }
+}
+@container (max-width: 560px) {
+  .reminder-form {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .reminder-save {
+    margin-bottom: 0;
+  }
+  .cookie-row {
+    flex-direction: column;
+  }
+  .hw-item {
+    align-items: flex-start;
+    flex-wrap: wrap;
+  }
 }
 </style>
