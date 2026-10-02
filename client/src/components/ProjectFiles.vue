@@ -502,17 +502,22 @@ async function openFile(rel: string) {
 async function save(): Promise<boolean> {
   if (!current.value || !dirty.value || saving.value) return !dirty.value && !saving.value
   saving.value = true
+  const file = current.value
+  const projectId = props.project.id
   // 先快照"提交时的内容"（审查修复 #4）：响应期间继续输入的话，基准必须停在已提交的
   // 那份上，否则最新的草稿会被当成已保存，服务端实际只有旧内容
   const sent = draft.value
   try {
-    const r = await put<{ backup: string; size: number; mtime: string }>(`/api/projects/${props.project.id}/file`, {
-      path: current.value.rel,
+    const r = await put<{ backup: string; size: number; mtime: string }>(`/api/projects/${projectId}/file`, {
+      path: file.rel,
       content: sent,
     })
-    current.value = { ...current.value, content: sent, size: r.size, mtime: r.mtime }
+    // 只更新发起保存时的文件；切换、重新打开或关闭后忽略旧响应。
+    if (props.project.id === projectId && current.value === file) {
+      current.value = { ...file, content: sent, size: r.size, mtime: r.mtime }
+      if (mode.value === 'preview' && current.value.preview === 'markdown') await renderMarkdown()
+    }
     ElMessage.success(`已保存（旧内容备份为 ${r.backup}）`)
-    if (mode.value === 'preview' && current.value.preview === 'markdown') await renderMarkdown()
     return true
   } catch (e) {
     ElMessage.error((e as Error).message)

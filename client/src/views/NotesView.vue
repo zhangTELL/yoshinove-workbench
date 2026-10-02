@@ -331,7 +331,9 @@ async function createNote() {
 }
 
 async function saveNote() {
-  if (currentId.value === null) return
+  if (currentId.value === null || saving.value) return
+  const noteId = currentId.value
+  const baseline = savedSnap.value
   // 快照"提交时的内容"作为基准（审查修复 #4）：请求期间继续输入的话，
   // 当前草稿 ≠ 这份基准 → dirty 保持 true，不会被误标"已保存"
   const payload = {
@@ -342,8 +344,9 @@ async function saveNote() {
   }
   saving.value = true
   try {
-    await put(`/api/notes/${currentId.value}`, payload)
-    savedSnap.value = payload
+    await put(`/api/notes/${noteId}`, payload)
+    // 切换或重新打开后，旧请求不能更新当前笔记的保存基准。
+    if (currentId.value === noteId && savedSnap.value === baseline) savedSnap.value = payload
     await loadList()
     ElMessage.success('已保存')
   } finally {
