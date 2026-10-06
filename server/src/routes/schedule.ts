@@ -178,7 +178,7 @@ export const scheduleRoutes: FastifyPluginAsync = async (app) => {
 
     return {
       format: 'yoshinove-timetable',
-      version: 1,
+      version: 2,
       exportedAt: new Date().toLocaleString('zh-CN', { hour12: false }),
       semesters: semRows.map((s) => {
         const courseRows = db.select().from(courses).where(eq(courses.semesterId, s.id)).all()
@@ -192,6 +192,8 @@ export const scheduleRoutes: FastifyPluginAsync = async (app) => {
           startDate: s.startDate,
           totalWeeks: s.totalWeeks,
           isCurrent: !!s.isCurrent,
+          swaps: db.select().from(scheduleSwaps).where(eq(scheduleSwaps.semesterId, s.id)).all()
+            .map(({ date, sourceDate }) => ({ date, sourceDate })),
           sectionTimes: (JSON.parse(s.sectionTimes) as { start: string; end: string }[]).map((t) => ({
             start: t.start,
             end: t.end,
