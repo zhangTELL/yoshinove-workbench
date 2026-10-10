@@ -1,12 +1,11 @@
 <script setup lang="ts">
-import { computed, nextTick, onMounted, ref } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Delete, Plus, Search } from '@element-plus/icons-vue'
 import { MAX_COMPARISON_CODE_BYTES, MAX_COMPARISON_MODELS, normalizeComparisonCode } from '@wb/shared'
 import type { ComparisonEntry, ComparisonInput, ComparisonSummary, ComparisonTopic } from '@wb/shared'
 import { del, get, post, put } from '../api/http'
 import { useCompactLayout } from '../composables/useCompactLayout'
-import { useRememberedSelection } from '../composables/useRememberedSelection'
 import { useUnsavedChanges } from '../composables/useUnsavedChanges'
 import { wrapPreviewDoc } from '../utils/previewDoc'
 
@@ -16,7 +15,7 @@ const listVisible = ref(false)
 const topics = ref<ComparisonSummary[]>([])
 const search = ref('')
 const currentId = ref(0)
-const lastTopicId = useRememberedSelection<number>('workbench.compareTopic', 0, (value): value is number => typeof value === 'number' && Number.isSafeInteger(value) && value > 0)
+const pageVisible = ref(document.visibilityState === 'visible')
 const form = ref<ComparisonInput | null>(null)
 const snapshot = ref('null')
 const dirty = computed(() => JSON.stringify(form.value) !== snapshot.value)
@@ -52,7 +51,6 @@ function emptyEntry(index: number): ComparisonEntry {
 
 function applyTopic(topic: ComparisonTopic) {
   currentId.value = topic.id
-  lastTopicId.value = topic.id
   form.value = { name: topic.name, prompt: topic.prompt, entries: topic.entries }
   snapshot.value = JSON.stringify(form.value)
   selectedIds.value = topic.entries.map((entry) => entry.id)
@@ -122,7 +120,6 @@ async function saveTopic(): Promise<boolean> {
       : await post<{ topic: ComparisonTopic }>('/api/ai/comparisons', payload)
     if (form.value === original) {
       currentId.value = response.topic.id
-      lastTopicId.value = response.topic.id
       if (JSON.stringify(form.value) === originalSnapshot) {
         form.value = { name: response.topic.name, prompt: response.topic.prompt, entries: response.topic.entries }
       }
@@ -139,6 +136,22 @@ async function saveTopic(): Promise<boolean> {
   } finally { saving.value = false }
 }
 
+function clearTopic() {
+  currentId.value = 0
+  form.value = null
+  snapshot.value = 'null'
+  selectedIds.value = []
+  previewCodes.value = {}
+  editorVisible.value = false
+  expandedVisible.value = false
+  listVisible.value = false
+  saveError.value = ''
+}
+
+async function backToTopics() {
+  if (!busy.value && await confirmLeave()) clearTopic()
+}
+
 async function removeTopic() {
   if (busy.value || !form.value || !currentId.value) return
   try { await ElMessageBox.confirm(`删除「${form.value.name}」及其中的所有模型作品？`, '删除对比主题', { type: 'warning' }) }
@@ -146,15 +159,11 @@ async function removeTopic() {
   saving.value = true
   try {
     await del(`/api/ai/comparisons/${currentId.value}`)
-    currentId.value = 0
-    lastTopicId.value = 0
-    form.value = null
-    snapshot.value = 'null'
+    clearTopic()
     await loadTopics()
     ElMessage.success('主题已删除')
   } catch (e) { ElMessage.error(`删除失败：${(e as Error).message}`) }
   finally { saving.value = false }
-  if (topics.value[0]) await openTopic(topics.value[0])
 }
 
 function addEntry() {
@@ -237,13 +246,20 @@ function expand(entry: ComparisonEntry) {
 
 async function initialize() {
   loading.value = true
-  const success = await loadTopics()
+  await loadTopics()
   loading.value = false
-  if (!success) return
-  const topic = topics.value.find((item) => item.id === lastTopicId.value) ?? topics.value[0]
-  if (topic) await openTopic(topic)
 }
-onMounted(() => { initialLoad = initialize() })
+
+// 任意用户作品都可能带计时器、动画或音频；隐藏页面时卸载 iframe，恢复时重建。
+function onVisibilityChange() {
+  pageVisible.value = document.visibilityState === 'visible'
+}
+onMounted(() => {
+  document.addEventListener('visibilitychange', onVisibilityChange)
+  onVisibilityChange()
+  initialLoad = initialize()
+})
+onBeforeUnmount(() => document.removeEventListener('visibilitychange', onVisibilityChange))
 </script>
 
 <template>
@@ -251,13 +267,13 @@ onMounted(() => { initialLoad = initialize() })
     <div class="comparison-head">
       <div><h3>模型作品对比</h3><p>用同一提示词在不同平台生成作品，再把 SVG 或 HTML 汇总到一个主题中。</p></div>
       <div class="head-actions">
-        <el-button v-if="compact" :aria-expanded="listVisible" @click="listVisible = !listVisible">{{ listVisible ? '收起主题列表' : '查看已保存主题' }}</el-button>
+        <el-button v-if="compact && form" :aria-expanded="listVisible" @click="listVisible = !listVisible">{{ listVisible ? '收起主题列表' : '查看已保存主题' }}</el-button>
         <el-button type="primary" :icon="Plus" :disabled="busy" @click="newTopic()">新建主题</el-button>
       </div>
     </div>
-    <div class="comparison-workspace">
-      <button v-if="compact && listVisible" class="topic-backdrop" aria-label="关闭主题列表" @click="listVisible = false" />
-      <aside v-show="!compact || listVisible" class="topic-sidebar">
+    <div class="comparison-workspace" :class="{ 'topic-list-mode': !form }">
+      <button v-if="compact && form && listVisible" class="topic-backdrop" aria-label="关闭主题列表" @click="listVisible = false" />
+      <aside v-show="!form || !compact || listVisible" class="topic-sidebar">
         <div class="sidebar-label">已保存主题 <span>{{ topics.length }}</span></div>
         <el-input v-model="search" placeholder="搜索主题" aria-label="搜索对比主题" :prefix-icon="Search" clearable />
         <el-alert v-if="loadError" :title="`加载失败：${loadError}`" type="error" :closable="false"><el-button size="small" @click="loadTopics">重试</el-button></el-alert>
@@ -268,9 +284,10 @@ onMounted(() => { initialLoad = initialize() })
           <el-empty v-if="!loading && !loadError && !filteredTopics.length" :image-size="55" :description="search.trim() ? '没有匹配的主题' : '还没有保存的主题'" />
         </div>
       </aside>
-      <main class="comparison-main" v-loading="loading">
+      <main v-if="form || !topics.length" class="comparison-main" v-loading="loading">
         <template v-if="form">
           <div class="topic-toolbar">
+            <el-button :disabled="busy" @click="backToTopics">返回主题列表</el-button>
             <el-input v-model="form.name" placeholder="主题名称，例如：鹈鹕骑自行车测试" aria-label="主题名称" :disabled="busy" maxlength="120" class="topic-title" />
             <span class="save-status" role="status" :title="saveError">{{ saving ? '正在保存…' : saveError ? '保存失败，可重试' : dirty ? '有未保存修改' : '已保存' }}</span>
             <el-button type="primary" :loading="saving" :disabled="!dirty || loading || readingFile" @click="saveTopic">{{ saveError ? '重试保存' : '保存主题' }}</el-button>
@@ -304,7 +321,7 @@ onMounted(() => { initialLoad = initialize() })
                   <el-button size="small" :disabled="!previewCodes[entry.id]" @click="expand(entry)">放大查看</el-button>
                 </div>
                 <div class="model-source"><span :title="entry.fileName">{{ entry.fileName || (entry.code.trim() ? '粘贴的代码' : '等待添加作品') }}</span><el-tag v-if="entry.code !== (previewCodes[entry.id] ?? '')" type="warning" size="small">待更新预览</el-tag></div>
-                <iframe v-if="previewCodes[entry.id]" :srcdoc="previewDoc(entry)" sandbox="allow-scripts" :title="`${entry.name} 的作品预览`" class="model-preview" />
+                <iframe v-if="pageVisible && previewCodes[entry.id]" :srcdoc="previewDoc(entry)" sandbox="allow-scripts" :title="`${entry.name} 的作品预览`" class="model-preview" />
                 <div v-else class="model-empty"><el-empty :image-size="65" description="添加这个模型生成的 SVG 或 HTML"><el-button type="primary" plain size="small" :disabled="busy" @click="editCode(entry)">粘贴代码</el-button></el-empty></div>
               </article>
             </div>
@@ -313,6 +330,7 @@ onMounted(() => { initialLoad = initialize() })
         <el-empty v-else-if="!loading" description="新建一个主题，把不同模型的作品放在一起比较"><el-button type="primary" :disabled="busy" @click="newTopic()">新建主题</el-button></el-empty>
       </main>
     </div>
+    <p v-if="!form && topics.length" class="topic-list-hint">选择一个主题后查看作品，也可以新建主题。</p>
     <input ref="fileInput" type="file" accept=".svg,.html,.htm" hidden @change="importFile" />
     <el-drawer v-model="editorVisible" :title="`作品源码 · ${editingEntry?.name || '模型'}`" size="min(680px, 94vw)" :close-on-click-modal="false">
       <template v-if="editingEntry">
@@ -326,7 +344,7 @@ onMounted(() => { initialLoad = initialize() })
       </template>
     </el-drawer>
     <el-dialog v-model="expandedVisible" :title="expandedEntry?.name || '作品预览'" width="92vw" top="3vh" destroy-on-close>
-      <iframe v-if="expandedEntry" :srcdoc="previewDoc(expandedEntry)" sandbox="allow-scripts" :title="`${expandedEntry.name} 的放大预览`" class="expanded-preview" />
+      <iframe v-if="pageVisible && expandedVisible && expandedEntry" :srcdoc="previewDoc(expandedEntry)" sandbox="allow-scripts" :title="`${expandedEntry.name} 的放大预览`" class="expanded-preview" />
     </el-dialog>
   </div>
 </template>
@@ -377,4 +395,10 @@ onMounted(() => { initialLoad = initialize() })
 .expanded-preview { width: 100%; height: 78vh; border: 0; background: #fff; }
 .compact .topic-sidebar { position: absolute; inset: 0 auto auto 0; z-index: 4; width: min(300px, 90%); box-shadow: var(--el-box-shadow-light); }
 .topic-backdrop { position: absolute; inset: 0; z-index: 3; border: 0; background: rgb(0 0 0 / 18%); cursor: pointer; }
+.topic-list-mode { display: block; min-height: 0; }
+.topic-list-mode .topic-sidebar { position: static; width: 100%; box-shadow: none; }
+.topic-list-mode .topic-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 10px; max-height: none; }
+.topic-list-mode .topic-item { padding: 16px; border: 1px solid var(--el-border-color-lighter); background: var(--el-fill-color-lighter); }
+.topic-list-mode .topic-item:hover { border-color: var(--el-color-primary-light-5); background: var(--el-color-primary-light-9); }
+.topic-list-hint { margin: 14px 0 0; color: var(--el-text-color-secondary); font-size: 13px; }
 </style>
