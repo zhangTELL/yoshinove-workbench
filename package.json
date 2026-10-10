@@ -8,7 +8,8 @@
     "dev:server": "pnpm --filter server dev",
     "dev:client": "pnpm --filter client dev",
     "build": "pnpm -r build",
-    "typecheck": "pnpm -r typecheck"
+    "typecheck": "pnpm -r typecheck",
+    "test:comparison-export": "pnpm --filter @wb/server exec tsx --test ../client/tests/comparisonExport.test.ts"
   },
   "devDependencies": {
     "concurrently": "^9.1.2"

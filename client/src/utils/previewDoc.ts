@@ -23,3 +23,9 @@ export function wrapPreviewDoc(code: string, opts: { padding?: number; maxHeight
   }
   return `<!doctype html><html><head><meta charset="utf-8"><style>${style.join('')}</style></head><body>${code}</body></html>`
 }
+
+/** 模型作品预览与独立 HTML 导出使用相同的文档包装。 */
+export function wrapComparisonPreview(code: string): string {
+  const markup = code.replace(/^\s*<\?xml[\s\S]*?\?>\s*/i, '').replace(/^<!doctype\s+svg[^>]*>\s*/i, '')
+  return markup ? wrapPreviewDoc(markup, { padding: 0, maxHeight: '100vh' }) : ''
+}

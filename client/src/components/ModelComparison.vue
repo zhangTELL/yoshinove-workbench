@@ -1,13 +1,14 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Delete, Plus, Search } from '@element-plus/icons-vue'
+import { Delete, Download, Plus, Search } from '@element-plus/icons-vue'
 import { MAX_COMPARISON_CODE_BYTES, MAX_COMPARISON_MODELS, normalizeComparisonCode } from '@wb/shared'
 import type { ComparisonEntry, ComparisonInput, ComparisonSummary, ComparisonTopic } from '@wb/shared'
 import { del, get, post, put } from '../api/http'
 import { useCompactLayout } from '../composables/useCompactLayout'
 import { useUnsavedChanges } from '../composables/useUnsavedChanges'
-import { wrapPreviewDoc } from '../utils/previewDoc'
+import { wrapComparisonPreview } from '../utils/previewDoc'
+import { buildComparisonHtml } from '../utils/comparisonExport'
 
 const pageEl = ref<HTMLElement>()
 const compact = useCompactLayout(pageEl, 1000)
@@ -234,9 +235,24 @@ async function copyText(value: string) {
   catch { ElMessage.warning('复制失败，请打开源码手动复制') }
 }
 
+function exportHtml() {
+  if (busy.value || !form.value) return
+  try {
+    const { html, fileName } = buildComparisonHtml(form.value, selectedIds.value)
+    const url = URL.createObjectURL(new Blob([html], { type: 'text/html;charset=utf-8' }))
+    const link = document.createElement('a')
+    link.href = url
+    link.download = fileName
+    document.body.appendChild(link)
+    link.click()
+    link.remove()
+    window.setTimeout(() => URL.revokeObjectURL(url), 1000)
+    ElMessage.success(`已导出 ${visibleEntries.value.length} 个模型的对比 HTML`)
+  } catch (e) { ElMessage.error(`导出失败：${(e as Error).message}`) }
+}
+
 function previewDoc(entry: ComparisonEntry): string {
-  const code = (previewCodes.value[entry.id] ?? '').replace(/^\s*<\?xml[\s\S]*?\?>\s*/i, '').replace(/^<!doctype\s+svg[^>]*>\s*/i, '')
-  return code ? wrapPreviewDoc(code, { padding: 0, maxHeight: '100vh' }) : ''
+  return wrapComparisonPreview(previewCodes.value[entry.id] ?? '')
 }
 
 function expand(entry: ComparisonEntry) {
@@ -291,6 +307,9 @@ onBeforeUnmount(() => document.removeEventListener('visibilitychange', onVisibil
             <el-input v-model="form.name" placeholder="主题名称，例如：鹈鹕骑自行车测试" aria-label="主题名称" :disabled="busy" maxlength="120" class="topic-title" />
             <span class="save-status" role="status" :title="saveError">{{ saving ? '正在保存…' : saveError ? '保存失败，可重试' : dirty ? '有未保存修改' : '已保存' }}</span>
             <el-button type="primary" :loading="saving" :disabled="!dirty || loading || readingFile" @click="saveTopic">{{ saveError ? '重试保存' : '保存主题' }}</el-button>
+            <el-tooltip content="将当前勾选的模型作品和主题信息导出为 HTML，包含尚未保存的修改">
+              <el-button :icon="Download" :disabled="busy || !visibleEntries.some((entry) => entry.code.trim())" @click="exportHtml">导出 HTML</el-button>
+            </el-tooltip>
             <el-button v-if="currentId" :icon="Delete" :disabled="busy" @click="removeTopic">删除主题</el-button>
           </div>
           <details class="prompt-details" :open="!!form.prompt">
