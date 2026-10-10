@@ -355,3 +355,46 @@ export interface PromptRecord {
   updatedAt: string
   cases: PromptCase[]
 }
+
+// ===== 手动模型作品对比 =====
+export const MAX_COMPARISON_CODE_BYTES = 2 * 1024 * 1024
+export const MAX_COMPARISON_MODELS = 20
+
+export interface ComparisonEntry {
+  id: string
+  name: string
+  code: string
+  format: 'svg' | 'html'
+  fileName: string
+}
+
+export interface ComparisonInput {
+  name: string
+  prompt: string
+  entries: ComparisonEntry[]
+}
+
+export interface ComparisonSummary {
+  id: number
+  name: string
+  modelCount: number
+  updatedAt: string
+}
+
+export interface ComparisonTopic extends ComparisonInput {
+  id: number
+  createdAt: string
+  updatedAt: string
+}
+
+/** 兼容直接粘贴模型回复中的 HTML / SVG 代码块。空内容用于保存尚未收集完的主题。 */
+export function normalizeComparisonCode(raw: string): { code: string; format: 'svg' | 'html' } {
+  // 完整网页里的代码示例也可能含反引号，只有模型回复文本才需要抽取代码块。
+  const fence = raw.trimStart().startsWith('<') ? null : raw.match(/```(?:html|svg|xml)?\s*([\s\S]*?)```/i)
+  const code = (fence ? fence[1] : raw).trim()
+  if (!code) return { code: '', format: 'html' }
+  const markup = code.replace(/^<\?xml[\s\S]*?\?>\s*/i, '').replace(/^<!doctype\s+svg[^>]*>\s*/i, '')
+  if (/^<svg\b/i.test(markup)) return { code, format: 'svg' }
+  if (/^<(?:!doctype\s+html\b|[a-z][\w:-]*(?:\s|\/?>)|!--)/i.test(markup)) return { code, format: 'html' }
+  throw new Error('请粘贴 SVG 或 HTML 代码，也可以直接粘贴包含代码块的模型回复')
+}

@@ -11,7 +11,7 @@ import {
   type ProfileRow,
 } from '../services/balanceStore.js'
 
-/** AI 实验区服务端：模型/余额配置、平台目录、余额抓取、模型对话与对比。Key 只在服务端出现。 */
+/** AI 实验区服务端：模型/余额配置、平台目录、余额抓取、模型对话。Key 只在服务端出现。 */
 
 function trimSlash(u: string): string {
   return u.replace(/\/+$/, '')
@@ -188,57 +188,4 @@ export const aiRoutes: FastifyPluginAsync = async (app) => {
     }
   })
 
-  /** 多模型并排对比：prompt 含 {输入} 则替换，否则 prompt 作 system、用例作 user */
-  app.post('/api/ai/compare', async (req, reply) => {
-    const b = req.body as { profileIds?: number[]; prompt?: string; cases?: string[] }
-    if (!Array.isArray(b.profileIds) || !b.profileIds.length) return reply.code(400).send({ message: '请至少选择一个模型' })
-    const prompt = String(b.prompt ?? '')
-    const cases = (Array.isArray(b.cases) && b.cases.length ? b.cases : ['']).slice(0, 10)
-    const rows = b.profileIds.map(getProfile).filter((r): r is ProfileRow => !!r)
-    const hasVar = /\{\s*输入\s*\}|\{\s*input\s*\}/.test(prompt)
-
-    const results = await Promise.all(
-      rows.map(async (row) => {
-        const outputs = await Promise.all(
-          cases.map(async (c, idx) => {
-            const messages = hasVar
-              ? [{ role: 'user', content: prompt.replace(/\{\s*输入\s*\}|\{\s*input\s*\}/g, c) }]
-              : [...(prompt ? [{ role: 'system', content: prompt }] : []), { role: 'user', content: c }]
-            const started = Date.now()
-            try {
-              const res = await fetch(chatUrl(row.base_url), {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${row.api_key}` },
-                body: JSON.stringify({ model: row.model, messages }),
-              })
-              const raw = await res.text()
-              let body: Record<string, unknown> = {}
-              try {
-                body = JSON.parse(raw) as Record<string, unknown>
-              } catch {
-                /* 同上 */
-              }
-              if (!res.ok) {
-                return {
-                  caseIndex: idx,
-                  caseInput: c,
-                  ok: false,
-                  error: `HTTP ${res.status}：${errorMessage(body, raw)}`,
-                  text: '',
-                  latencyMs: Date.now() - started,
-                  tokens: 0,
-                }
-              }
-              const { text, tokens } = readCompletion(body)
-              return { caseIndex: idx, caseInput: c, ok: true, text, latencyMs: Date.now() - started, tokens }
-            } catch (e) {
-              return { caseIndex: idx, caseInput: c, ok: false, error: (e as Error).message, text: '', latencyMs: Date.now() - started, tokens: 0 }
-            }
-          }),
-        )
-        return { profileId: row.id, name: row.name, model: row.model, provider: row.provider, outputs }
-      }),
-    )
-    return { prompt, hasVar, cases, results }
-  })
 }

@@ -1,9 +1,10 @@
 import cors from '@fastify/cors'
 import multipart from '@fastify/multipart'
 import Fastify from 'fastify'
-import { ensureSchema } from './db/index.js'
+import { ensureSchema, sqlite } from './db/index.js'
 import { aiRoutes } from './routes/ai.js'
 import { chaoxingRoutes } from './routes/chaoxing.js'
+import { comparisonRoutes } from './routes/comparisons.js'
 import { importRoutes } from './routes/import.js'
 import { noteRoutes } from './routes/notes.js'
 import { notificationRoutes } from './routes/notifications.js'
@@ -63,6 +64,7 @@ async function main() {
   await app.register(toolRoutes)
   await app.register(noteRoutes)
   await app.register(aiRoutes)
+  await app.register(comparisonRoutes, { database: sqlite })
   await app.register(promptRoutes)
   await app.register(projectRoutes)
 

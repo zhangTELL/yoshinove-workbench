@@ -5,6 +5,7 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { textKeyOf, workKeyOf } from '../services/chaoxingKey.js'
 import * as schema from './schema.js'
+import { COMPARISON_SCHEMA_SQL } from './comparisonSchema.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const dataDir = path.resolve(__dirname, '../../data')
@@ -263,6 +264,8 @@ export function ensureSchema() {
       updated_at TEXT NOT NULL
     );
   `)
+
+  sqlite.exec(COMPARISON_SCHEMA_SQL)
 
   /** 轻量迁移：老库补列（SQLite 没有 ADD COLUMN IF NOT EXISTS） */
   const addColumn = (table: string, column: string, ddl: string): void => {

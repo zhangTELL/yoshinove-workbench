@@ -20,6 +20,7 @@ import { chartPalette, chartSeries as chartSeriesColors } from '../utils/chartTh
 import { wrapPreviewDoc } from '../utils/previewDoc'
 import { useUnsavedChanges } from '../composables/useUnsavedChanges'
 import { useCompactLayout } from '../composables/useCompactLayout'
+import ModelComparison from '../components/ModelComparison.vue'
 
 // ==================== 板块切换（由左侧主导航的折叠分组驱动）====================
 const route = useRoute()
@@ -825,95 +826,16 @@ function removeCase(i: number) {
   promptForm.value.cases.splice(i, 1)
 }
 
-/** 把 Prompt 库的用例灌到对比页，省得重复录入 */
-function pushCasesToCompare() {
-  const lines = promptForm.value.cases.map((c) => c.input).filter((s) => s.trim())
-  if (!lines.length) {
-    ElMessage.warning('当前提示词没有用例')
-    return
-  }
-  cmpPrompt.value = promptForm.value.content
-  cmpCases.value = lines.join('\n')
-  void router.push({ path: '/ai-lab', query: { tab: 'compare' } })
-  ElMessage.success(`已带入 ${lines.length} 条用例`)
-}
+// ==================== 手动模型作品对比 ====================
+const comparisonRef = ref<InstanceType<typeof ModelComparison>>()
 
-// ==================== 模型对比 ====================
-const cmpProfiles = ref<number[]>([])
-const cmpPrompt = ref('')
-const cmpCases = ref('')
-const cmpRunning = ref(false)
-
-interface CmpOutput {
-  caseIndex: number
-  caseInput: string
-  ok: boolean
-  text: string
-  error?: string
-  latencyMs: number
-  tokens: number
-}
-interface CmpResult {
-  profileId: number
-  name: string
-  model: string
-  provider: string
-  outputs: CmpOutput[]
-}
-const cmpResult = ref<{ prompt: string; hasVar: boolean; cases: string[]; results: CmpResult[] } | null>(null)
-/** 每个输出块独立切换「渲染 / 源码」 */
-const cmpViewMode = ref<Record<string, 'render' | 'text'>>({})
-
-const cmpSelectable = computed(() => profiles.value.filter((p) => p.hasApiKey))
-
-/** 输出里是否含可渲染的 SVG / HTML */
-function extractRenderable(text: string): string | null {
-  if (!text) return null
-  const fence = text.match(/```(?:html|svg|xml)?\s*([\s\S]*?)```/i)
-  const candidate = (fence ? fence[1] : text).trim()
-  return candidate.startsWith('<') ? candidate : null
-}
-
-function toggleViewMode(key: string) {
-  cmpViewMode.value[key] = cmpViewMode.value[key] === 'render' ? 'text' : 'render'
-}
-
-function viewModeOf(key: string): 'render' | 'text' {
-  return cmpViewMode.value[key] ?? 'text'
-}
-
-async function runCompare() {
-  if (!cmpProfiles.value.length) {
-    ElMessage.warning('请至少选择一个模型')
-    return
-  }
-  cmpRunning.value = true
-  cmpViewMode.value = {}
-  try {
-    const cases = cmpCases.value
-      .split('\n')
-      .map((s) => s.trim())
-      .filter(Boolean)
-    cmpResult.value = await post('/api/ai/compare', {
-      profileIds: cmpProfiles.value,
-      prompt: cmpPrompt.value,
-      cases: cases.length ? cases : [''],
-    })
-    ElMessage.success('对比完成')
-  } catch (e) {
-    ElMessage.error((e as Error).message)
-  } finally {
-    cmpRunning.value = false
-  }
-}
-
-async function copyText(text: string) {
-  try {
-    await navigator.clipboard.writeText(text)
-    ElMessage.success('已复制')
-  } catch {
-    ElMessage.warning('复制失败，请手动选择文本')
-  }
+/** 记录共同提示词，生成作品后再手动添加到主题。 */
+async function pushPromptToCompare() {
+  const seed = { name: promptForm.value.name, prompt: promptForm.value.content }
+  const failure = await router.push({ path: '/ai-lab', query: { tab: 'compare' } })
+  if (failure || activeTab.value !== 'compare') return
+  await nextTick()
+  await comparisonRef.value?.newTopic(seed)
 }
 
 // ==================== 沙箱渲染 ====================
@@ -940,11 +862,6 @@ function clearSandbox() {
  * ② 样式不要同时写到 `html` 上，否则 flex 容器会变成根元素，布局不可预期。
  */
 const sandboxDoc = computed(() => (sandboxSrc.value ? wrapPreviewDoc(sandboxSrc.value) : ''))
-
-function resultDoc(text: string): string {
-  // 对比区里空间窄：内边距收小、svg 上限 300px
-  return wrapPreviewDoc(extractRenderable(text) ?? '', { padding: 12, maxHeight: '300px' })
-}
 
 // ==================== 初始化 ====================
 onMounted(async () => {
@@ -1282,7 +1199,7 @@ function onThemeChange() {
             <span>测试用例（{{ promptForm.cases.length }}）</span>
             <div>
               <el-button size="small" :icon="Plus" @click="addCase">加一条</el-button>
-              <el-button size="small" :disabled="!promptForm.cases.length" @click="pushCasesToCompare">带到模型对比</el-button>
+              <el-button size="small" :disabled="!promptForm.content.trim()" @click="pushPromptToCompare">新建对比主题</el-button>
             </div>
           </div>
           <div v-for="(c, i) in promptForm.cases" :key="i" class="case-row">
@@ -1297,63 +1214,8 @@ function onThemeChange() {
       </div>
     </div>
 
-    <!-- ==================== 模型对比 ==================== -->
-    <div v-show="activeTab === 'compare'" class="tab-block">
-      <div class="cmp-config">
-        <div class="cmp-field">
-          <label>参与对比的模型</label>
-          <el-select v-model="cmpProfiles" multiple placeholder="从已配置的平台里选（需先填 Key）" style="width: 100%">
-            <el-option v-for="p in cmpSelectable" :key="p.id" :label="`${p.name}（${p.model || '未填模型名'}）`" :value="p.id" />
-          </el-select>
-          <div v-if="!cmpSelectable.length" class="form-tip">还没有可用的模型：先去「账户余额」添加平台并填好 API Key</div>
-        </div>
-        <div class="cmp-field">
-          <label>提示词</label>
-          <el-input
-            v-model="cmpPrompt"
-            type="textarea"
-            :rows="5"
-            placeholder="含 {输入} 则该处会被每条用例替换；不含则本条作为 system，用例作为 user"
-          />
-        </div>
-        <div class="cmp-field">
-          <label>用例（每行一条，留空只跑一次）</label>
-          <el-input v-model="cmpCases" type="textarea" :rows="3" placeholder="红色的圆形按钮&#10;蓝色的方形图标" />
-        </div>
-        <el-button type="primary" :loading="cmpRunning" @click="runCompare">开始对比</el-button>
-      </div>
-
-      <div v-if="cmpResult" class="cmp-results">
-        <div v-for="r in cmpResult.results" :key="r.profileId" class="cmp-col">
-          <div class="cmp-col-head">
-            <span class="cmp-col-name">{{ r.name }}</span>
-            <span class="cmp-col-model">{{ r.model }}</span>
-          </div>
-          <div v-for="o in r.outputs" :key="o.caseIndex" class="cmp-out">
-            <div class="cmp-out-head">
-              <span v-if="cmpResult.cases.length > 1" class="cmp-case">用例 {{ o.caseIndex + 1 }}</span>
-              <span class="cmp-stat">{{ o.latencyMs }}ms · {{ o.tokens || 0 }} tokens</span>
-              <div style="flex: 1" />
-              <el-button v-if="o.ok && extractRenderable(o.text)" size="small" text @click="toggleViewMode(`${r.profileId}-${o.caseIndex}`)">
-                {{ viewModeOf(`${r.profileId}-${o.caseIndex}`) === 'render' ? '看代码' : '看效果' }}
-              </el-button>
-              <el-button v-if="o.ok" size="small" text @click="copyText(o.text)">复制</el-button>
-            </div>
-            <el-alert v-if="!o.ok" type="error" :closable="false" show-icon :title="o.error ?? '调用失败'" />
-            <template v-else>
-              <iframe
-                v-if="viewModeOf(`${r.profileId}-${o.caseIndex}`) === 'render' && extractRenderable(o.text)"
-                class="cmp-frame"
-                sandbox="allow-scripts"
-                :srcdoc="resultDoc(o.text)"
-              />
-              <pre v-else class="cmp-text">{{ o.text }}</pre>
-            </template>
-          </div>
-        </div>
-      </div>
-      <el-empty v-else description="选好模型与提示词后点「开始对比」" />
-    </div>
+    <!-- ==================== 模型作品对比 ==================== -->
+    <ModelComparison v-if="activeTab === 'compare'" ref="comparisonRef" />
 
     <!-- ==================== 沙箱渲染 ==================== -->
     <div v-show="activeTab === 'sandbox'" class="tab-block">
@@ -1905,90 +1767,6 @@ function onThemeChange() {
   margin-top: 14px;
   display: flex;
   gap: 8px;
-}
-
-.cmp-config {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  margin-bottom: 18px;
-}
-.cmp-field label {
-  display: block;
-  font-size: 13px;
-  color: var(--el-text-color-regular);
-  margin-bottom: 4px;
-}
-.cmp-results {
-  display: flex;
-  gap: 12px;
-  overflow-x: auto;
-  align-items: flex-start;
-}
-.cmp-col {
-  flex: 1 0 320px;
-  min-width: 320px;
-  border: 1px solid var(--el-border-color);
-  border-radius: var(--wb-radius-card);
-  padding: 10px;
-}
-.cmp-col-head {
-  display: flex;
-  align-items: baseline;
-  gap: 8px;
-  margin-bottom: 8px;
-  padding-bottom: 6px;
-  border-bottom: 1px solid var(--el-fill-color-light);
-}
-.cmp-col-name {
-  font-weight: 600;
-  color: var(--el-text-color-primary);
-}
-.cmp-col-model {
-  font-size: 11px;
-  color: var(--el-text-color-disabled);
-}
-.cmp-out {
-  margin-bottom: 12px;
-}
-.cmp-out-head {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-bottom: 4px;
-}
-.cmp-case {
-  font-size: 12px;
-  color: var(--el-text-color-regular);
-  background: var(--el-fill-color-light);
-  border-radius: var(--wb-radius-small);
-  padding: 1px 6px;
-  white-space: nowrap;
-}
-.cmp-stat {
-  font-size: 11px;
-  color: var(--el-text-color-disabled);
-  white-space: nowrap;
-}
-.cmp-text {
-  margin: 0;
-  padding: 8px;
-  background: var(--el-fill-color-lighter);
-  border: 1px solid var(--el-fill-color);
-  border-radius: var(--wb-radius-base);
-  font-size: 12px;
-  line-height: 1.6;
-  white-space: pre-wrap;
-  word-break: break-word;
-  max-height: 320px;
-  overflow: auto;
-}
-.cmp-frame {
-  width: 100%;
-  height: 340px;
-  border: 1px solid var(--el-border-color);
-  border-radius: var(--wb-radius-base);
-  background: var(--el-bg-color);
 }
 
 .sandbox-frame-wrap {

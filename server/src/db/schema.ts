@@ -193,6 +193,16 @@ export const promptCases = sqliteTable('prompt_cases', {
   expected: text('expected').notNull().default(''),
 })
 
+export const comparisonTopics = sqliteTable('ai_comparison_topics', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  name: text('name').notNull(),
+  prompt: text('prompt').notNull().default(''),
+  entries: text('entries').notNull().default('[]'),
+  modelCount: integer('model_count').notNull().default(0),
+  createdAt: text('created_at').notNull(),
+  updatedAt: text('updated_at').notNull(),
+})
+
 /** 本地项目（P8）：path 是唯一身份，扫描与手动添加都按它幂等写入 */
 export const projects = sqliteTable('projects', {
   id: integer('id').primaryKey({ autoIncrement: true }),
