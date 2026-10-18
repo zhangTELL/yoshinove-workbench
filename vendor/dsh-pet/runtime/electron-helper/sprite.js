@@ -191,7 +191,7 @@ class PetSprite {
     this.hit.addEventListener('pointermove', (e) => this.onPointerMove(e), { signal: ac.signal });
     this.hit.addEventListener('click', () => this.onClick(), { signal: ac.signal });
     this.hit.addEventListener('contextmenu', (e) => this.onContextMenu(e), { signal: ac.signal });
-    this.hit.addEventListener('dblclick', () => this.showChatFromMenu(), { signal: ac.signal });
+    this.hit.addEventListener('dblclick', () => this.onWorkbenchDoubleClick(), { signal: ac.signal });
     window.addEventListener('workbench-quick-chat', () => this.showChatFromMenu(), { signal: ac.signal });
     window.addEventListener('pointerup', (e) => this.onPointerUp(e), { signal: ac.signal });
     window.addEventListener('pointercancel', (e) => this.onPointerUp(e), { signal: ac.signal });
@@ -1330,6 +1330,20 @@ class PetSprite {
   // 弹窗跟随宠物：基准是**身体命中区** this.hit（与气泡同一定位源——桌宠在视频中间，
   // 视频框右上角 ≠ 宠物右上角），取身体右上角，超出视口自动夹回（窗口右侧外扩区容纳）；
   // 弹窗是窗口内 DOM，期间整窗保持可交互（可点输入框），关闭后恢复命中区穿透。
+  async onWorkbenchDoubleClick() {
+    try {
+      const response = await fetch(BASE + '/assistant-config');
+      if (!response.ok) throw new Error('无法读取助手设置');
+      const config = await response.json();
+      document.title = (config.name || 'AI助手') + ' 桌宠';
+      if (config.petDoubleClick === 'sidebar') {
+        window.petBridge?.openDshSite('http://127.0.0.1:5173/?assistant=open');
+        return;
+      }
+    } catch (error) { console.warn('[dsh-pet] 读取双击设置失败，使用独立对话框', error); }
+    this.showChatFromMenu();
+  }
+
   showChatFromMenu() {
     if (this.chatClose) {
       this.chatClose();
@@ -1339,8 +1353,9 @@ class PetSprite {
     const m = S.mountChatDialog({
       petId: this.pet.id,
       baseUrl: BASE + '/chat',
-      x: Math.max(4, this.hit.getBoundingClientRect().right + 6),
-      y: Math.max(4, this.hit.getBoundingClientRect().top + 6),
+      x: this.hit.getBoundingClientRect().left + this.hit.getBoundingClientRect().width / 2 - 80,
+      y: this.hit.getBoundingClientRect().top - 48,
+      above: true,
       // 弹窗同菜单：只允许在「窗口 ∩ 工作区」内显示，贴边时不被屏幕裁掉（#41）
       clamp: this.visibleClampRect(),
       onSent: () => {

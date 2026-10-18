@@ -105,6 +105,8 @@ export function mountChatDialog(opts: {
   baseUrl?: string;
   x: number;
   y: number;
+  /** 输入框向上展开，避免内容增高时挡住宠物。 */
+  above?: boolean;
   /** 发送成功后调用（弹窗此时已关闭）：调用方叫醒一拍 /state 让回复 0 延迟出现。
    *  回复本身不从这里回传——它走 S（动作端点不回数据，数据只有一个出口）。 */
   onSent?: () => void;
@@ -144,6 +146,7 @@ export function mountChatDialog(opts: {
     root.style.width = w + 'px'; // 根宽度跟随（含 err 行）→ 夹回仍按实际宽
     input.style.height = 'auto';
     input.style.height = Math.max(input.scrollHeight, 22) + 'px';
+    if (root.isConnected) place();
   };
   input.addEventListener('input', resizeInput);
   resizeInput(); // 以占位符为初始宽度
@@ -161,10 +164,16 @@ export function mountChatDialog(opts: {
   document.body.appendChild(root);
 
   // 位置：以 (x,y) 落点，超出 clamp 矩形夹回
+  function place(): void {
+    const rr = root.getBoundingClientRect();
+    root.style.maxWidth = Math.max(80, c.w - 8) + 'px';
+    root.style.maxHeight = Math.max(40, c.h - 8) + 'px';
+    root.style.overflowY = 'auto';
+    root.style.left = Math.max(c.x + 4, Math.min(x, c.x + c.w - rr.width - 4)) + 'px';
+    const top = opts.above ? y + 38 - rr.height : y;
+    root.style.top = Math.max(c.y + 4, Math.min(top, c.y + c.h - rr.height - 4)) + 'px';
+  }
   resizeInput(); // append 后再量一次（此时样式已生效）
-  const rr = root.getBoundingClientRect();
-  root.style.left = Math.max(c.x + 4, Math.min(x, c.x + c.w - rr.width - 4)) + 'px';
-  root.style.top = Math.max(c.y + 4, Math.min(y, c.y + c.h - rr.height - 4)) + 'px';
 
   let closed = false;
   let sending = false;
@@ -232,20 +241,20 @@ export function mountChatDialog(opts: {
               actions.appendChild(button);
             }
             reviewBox.appendChild(actions);
-            const rect = root.getBoundingClientRect();
-            root.style.left = Math.max(c.x + 4, Math.min(x, c.x + c.w - rect.width - 4)) + 'px';
-            root.style.top = Math.max(c.y + 4, Math.min(y, c.y + c.h - rect.height - 4)) + 'px';
+            place();
             document.dispatchEvent(new CustomEvent('workbench-assistant-change'));
           } else close();
           if (onSent) onSent();
         } else {
           err.textContent = '对话失败：' + (state.message ?? state.reason);
           err.style.display = 'block';
+          place();
         }
       })
       .catch((e) => {
         err.textContent = '对话异常：' + String(e && e.message ? e.message : e);
         err.style.display = 'block';
+        place();
       })
       .finally(() => {
         sending = false;
@@ -254,7 +263,7 @@ export function mountChatDialog(opts: {
       });
   };
   input.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter') {
+    if (e.key === 'Enter' && !e.isComposing && !e.shiftKey) {
       e.preventDefault();
       doSend();
     }

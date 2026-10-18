@@ -12,6 +12,7 @@ export function mountPetHost(callbacks, port) {
   ctx.workbench = {
     setState: state => { petState = state },
     pending: callbacks.pending,
+    config: callbacks.config,
     review: callbacks.review,
   }
   ctx.llm = {

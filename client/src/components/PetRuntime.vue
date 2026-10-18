@@ -17,9 +17,9 @@ async function start() {
   } catch { if (alive) error.value = '桌宠暂未连接，请确认后端已运行；首次启动请执行 pnpm pet:prepare。' }
 }
 function onChat() { assistant.open = true; void loadAssistant() }
-function onDoubleClick(event: MouseEvent) { if ((event.target as HTMLElement).closest('.dsh-pet-hit')) onChat() }
-onMounted(() => { void start(); if (!props.settings) { document.addEventListener('workbench-assistant-change', onChat); document.addEventListener('dblclick', onDoubleClick) } })
-onBeforeUnmount(() => { alive = false; dispose?.(); document.removeEventListener('workbench-assistant-change', onChat); document.removeEventListener('dblclick', onDoubleClick) })
+function onChange() { void loadAssistant() }
+onMounted(() => { void start(); if (!props.settings) { document.addEventListener('workbench-assistant-change', onChange); document.addEventListener('workbench-assistant-open', onChat) } })
+onBeforeUnmount(() => { alive = false; dispose?.(); document.removeEventListener('workbench-assistant-change', onChange); document.removeEventListener('workbench-assistant-open', onChat) })
 </script>
 <template>
   <section v-if="settings" class="pet-settings-section">

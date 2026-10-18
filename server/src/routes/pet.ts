@@ -22,6 +22,7 @@ export const petRoutes: FastifyPluginAsync<{ assistant: Assistant; port: number 
   const { mountPetHost } = await import(new URL('../../../vendor/dsh-pet/lib/workbench-host.mjs', import.meta.url).href)
   const runtime: PetRuntime = mountPetHost({
     key: assistant.readKey,
+    config: assistant.config,
     chat: async (text: string, persona: string, messages: { role: string; content: { type: string; text: string }[] }[]) => {
       const history = messages.slice(0, -1).map(message => ({ role: message.role, content: message.content.filter(block => block.type === 'text').map(block => block.text).join('') }))
       const imageGuide = messages.at(-1)?.content.filter(block => block.type === 'text').map(block => block.text).join('').slice(text.length) ?? ''

@@ -1421,8 +1421,9 @@ export function makePetUI(rt: {
         chatRef.current = mountChatDialog({
           petId: cfg.id,
           baseUrl: '/dsh-pet-7340/chat',
-          x: hitRect ? hitRect.right + 6 : window.innerWidth - 256,
-          y: hitRect ? hitRect.top + 6 : 8,
+          x: hitRect ? hitRect.left + hitRect.width / 2 - 80 : window.innerWidth - 256,
+          y: hitRect ? hitRect.top - 48 : 8,
+          above: true,
           onSent: () => {
             // 发送成功：回复已写进 S，叫醒一拍 /state 让气泡 0 延迟出现（不必等下一个 1s）
             console.info('[dsh-pet] 对话已发送 pet=' + cfg.id);
@@ -1571,6 +1572,18 @@ export function makePetUI(rt: {
         height: ((HIT_BOX.y1 - HIT_BOX.y0) / 360) * 100 + '%',
       },
       onClick: handleClick,
+      onDoubleClick: async () => {
+        try {
+          const response = await fetch('/dsh-pet-7340/assistant-config');
+          if (!response.ok) throw new Error('无法读取助手设置');
+          const config = await response.json();
+          if (config.petDoubleClick === 'sidebar') {
+            document.dispatchEvent(new CustomEvent('workbench-assistant-open'));
+            return;
+          }
+        } catch (error) { console.warn('[dsh-pet] 读取双击设置失败，使用独立对话框', error); }
+        handleMenuAction({ label: '对话', action: 'chat' });
+      },
       onPointerDown: handlePointerDown,
       onPointerMove: handlePointerMove,
       onPointerUp: handlePointerUp,

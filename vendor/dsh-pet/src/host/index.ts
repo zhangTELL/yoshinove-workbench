@@ -858,6 +858,9 @@ export function apply(ctx: any): void {
     const rest = decodeURIComponent(url.pathname.slice(ROUTE_PREFIX.length + 1));
 
     // 成品配置：/dsh-pet-7340/config（GET 读取合并成品 / PUT 保存用户层 / POST 同步内置默认）
+    if (rest === 'assistant-config' && method === 'GET' && ctx.workbench?.config) {
+      return { kind: 'json', status: 200, obj: ctx.workbench.config(), headers: { 'Cache-Control': 'no-store' } };
+    }
     if (rest === 'config') {
       if (method === 'GET') {
         // 唯一配置入口：readAllConfig 返回绝对正确的完成品聚合（{ main:{...}, test1:{...} }），

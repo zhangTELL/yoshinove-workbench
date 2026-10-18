@@ -660,7 +660,7 @@ app.whenReady().then(() => {
     target.showInactive();
     target.focus();
     target.webContents.send('workbench:quick-chat');
-  })) console.warn('[小TELL 桌宠] Ctrl+Alt+K 已被其他应用占用，仍可右键或双击宠物对话');
+  })) console.warn('[AI助手 桌宠] Ctrl+Alt+K 已被其他应用占用，仍可右键或双击宠物对话');
   console.error(
     '[dsh-pet-desktop-helper] displays: ' +
       JSON.stringify(deskGeometry()) +
