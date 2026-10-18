@@ -10,6 +10,10 @@ export default defineConfig({
   server: {
     port: 5173,
     proxy: {
+      '/dsh-pet-7340': {
+        target: 'http://127.0.0.1:5175',
+        changeOrigin: true,
+      },
       '/api': {
         target: 'http://127.0.0.1:5175',
         changeOrigin: true,

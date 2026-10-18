@@ -131,3 +131,34 @@ test('上游认证失败与输出截断不会产生修改，错误不会回显�
     assert.equal(s.database.prepare('SELECT 1 FROM assistant_turns').get(), undefined)
   }
 })
+
+test('笔记、Prompt、成绩和健康跑可同批修改，撤销完整恢复内容、变量、版本和派生绩点', async t => {
+  const s = setup([
+    call('search_records', { entity: 'note' }), call('search_records', { entity: 'prompt' }), call('search_records', { entity: 'score' }),
+    call('apply_changes', { changes: [
+      { entity: 'note', action: 'update', id: 1, values: { content: '完整原文\n新增总结' } },
+      { entity: 'prompt', action: 'update', id: 1, values: { content: '介绍{主题}' } },
+      { entity: 'score', action: 'update', id: 1, values: { score: 95 } },
+      { entity: 'run', action: 'create', values: { date: '2026-09-01', distanceKm: 2.5, steps: 3000 } },
+    ] }),
+  ]); t.after(() => s.app.close())
+  s.database.prepare("INSERT INTO notes(title,content,created_at,updated_at) VALUES('笔记','完整原文','旧时间','旧时间')").run()
+  s.database.prepare("INSERT INTO prompts(name,content,variables,version,updated_at) VALUES('提示词','旧内容','[]',3,'旧时间')").run()
+  s.database.prepare("INSERT INTO scores(semester,course_name,credit,score,grade_point) VALUES('学期','课程',2,80,3)").run()
+  const before = ['notes', 'prompts', 'scores', 'run_checkins'].map(table => s.database.prepare(`SELECT * FROM ${table}`).all())
+  await s.key(); const response = await s.chat(); assert.equal(response.statusCode, 200, response.body)
+  const turn = response.json().turn
+  assert.equal((s.database.prepare('SELECT grade_point FROM scores').get() as { grade_point: number }).grade_point, 4)
+  assert.equal((s.database.prepare('SELECT version FROM prompts').get() as { version: number }).version, 4)
+  assert.equal((await s.app.inject({ method: 'POST', url: `/api/assistant/turns/${turn.id}/undo` })).statusCode, 200)
+  assert.deepEqual(['notes', 'prompts', 'scores', 'run_checkins'].map(table => s.database.prepare(`SELECT * FROM ${table}`).all()), before)
+})
+
+test('已有打卡日期不被重复插入，原型字段不能绕过允许字段检查', async t => {
+  const s = setup([call('apply_changes', { changes: [{ entity: 'run', action: 'create', values: { date: '2026-09-01' } }] })]); t.after(() => s.app.close())
+  s.database.prepare("INSERT INTO run_checkins(date,note,created_at) VALUES('2026-09-01','原记录','旧时间')").run()
+  await s.key(); const response = await s.chat(); assert.equal(response.statusCode, 409, response.body)
+  assert.equal(response.json().message.includes('冲突'), true)
+  const s2 = setup([call('apply_changes', { changes: [{ entity: 'note', action: 'create', values: { title: '测试', toString: '不应写入' } }] })]); t.after(() => s2.app.close())
+  await s2.key(); assert.equal((await s2.chat()).statusCode, 400)
+})

@@ -4,6 +4,8 @@ import Fastify from 'fastify'
 import { ensureSchema, sqlite } from './db/index.js'
 import { aiRoutes } from './routes/ai.js'
 import { assistantRoutes } from './routes/assistant.js'
+import { createAssistant } from './services/assistant.js'
+import { petRoutes } from './routes/pet.js'
 import { chaoxingRoutes } from './routes/chaoxing.js'
 import { comparisonRoutes } from './routes/comparisons.js'
 import { importRoutes } from './routes/import.js'
@@ -23,6 +25,7 @@ const PORT = Number(process.env.PORT ?? 5175)
 
 async function main() {
   ensureSchema()
+  const assistant = createAssistant(sqlite)
 
   const app = Fastify({ logger: { level: 'warn' } })
   // ★ 本地 API 的 Origin 白名单（2026-10-01 审查修复 #1）。
@@ -65,7 +68,8 @@ async function main() {
   await app.register(toolRoutes)
   await app.register(noteRoutes)
   await app.register(aiRoutes)
-  await app.register(assistantRoutes, { database: sqlite })
+  await app.register(assistantRoutes, { database: sqlite, assistant })
+  await app.register(petRoutes, { assistant, port: PORT })
   await app.register(comparisonRoutes, { database: sqlite })
   await app.register(promptRoutes)
   await app.register(projectRoutes)

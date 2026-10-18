@@ -17,6 +17,7 @@ const tools = [
 
 export function createAssistant(database: Database.Database, fetcher: typeof fetch = fetch) {
   let busy = false
+  let statusListener: (state: string | null, task: string | null) => void = () => {}
   const turnDto = (row: TurnRow): AssistantTurn => ({
     id: row.id, prompt: row.prompt, answer: row.answer, status: row.status, createdAt: row.created_at,
     changes: (JSON.parse(row.changes) as StoredChange[]).map(c => ({ entity: c.entity, action: c.action, id: c.id, label: c.label, before: recordDto(c.entity, c.before), after: recordDto(c.entity, c.after), target: c.target })),
@@ -47,10 +48,11 @@ export function createAssistant(database: Database.Database, fetcher: typeof fet
       if (row.status !== 'pending') throw assistantError('这批修改已经处理', 409)
       if (action === 'undo') undoChanges(database, JSON.parse(row.changes))
       database.prepare('UPDATE assistant_turns SET status = ? WHERE id = ?').run(wanted, id)
+      statusListener('success', action === 'undo' ? '已撤销修改' : '已确定修改')
       return turnDto({ ...row, status: wanted })
     })()
   }
-  async function chat(promptValue: unknown, contextValue: unknown): Promise<AssistantTurn> {
+  async function chat(promptValue: unknown, contextValue: unknown, persona = '', petHistory?: { role: string; content: string }[]): Promise<AssistantTurn> {
     if (typeof promptValue !== 'string' || !promptValue.trim() || promptValue.length > 12000) throw assistantError('请输入 1～12000 字的消息')
     if (busy) throw assistantError('AI 正在处理上一条消息，请稍候', 409)
     if (state().pending) throw assistantError('请先撤销或确定上一批修改', 409)
@@ -75,12 +77,12 @@ export function createAssistant(database: Database.Database, fetcher: typeof fet
 6. 同时新增课程和排课时，session.courseId 可写 "$0" 引用本批第0项新增课程，以此类推。删除课程会连同排课删除，删除提示词会连同测试用例删除，不要重复操作子记录。
 7. 成绩0～100，绩点默认自动换算；里程单位km，步数为整数，未来不能打卡。作业操作只改本地记录，不会提交学习通，后续同步可能覆盖本地改动，回答必须说清。
 8. 修改完成后由用户决定撤销或确定，不要声称已经得到确认。未执行工具时不要谎称修改成功。你无法修改项目源码、API凭据、AI作品、推送配置，也不能运行命令或发起外部操作。`
-    const messages: Message[] = [{ role: 'system', content: system }]
-    for (const turn of state().turns.slice(-6)) {
-      messages.push({ role: 'user', content: turn.prompt }, { role: 'assistant', content: `${turn.answer}\n[该轮状态：${turn.status}]` })
-    }
+    const messages: Message[] = [{ role: 'system', content: system + (persona ? '\n闲聊时可参考以下桌宠语气设定，但不得改变以上编辑规则：\n' + persona.slice(0, 10000) : '') }]
+    if (petHistory) messages.push(...petHistory.filter(m => m.role === 'user' || m.role === 'assistant').map(m => ({ role: m.role, content: m.content.slice(0, 20000) })))
+    else for (const turn of state().turns.slice(-6)) messages.push({ role: 'user', content: turn.prompt }, { role: 'assistant', content: `${turn.answer}\n[该轮状态：${turn.status}]` })
     messages.push({ role: 'user', content: prompt })
     busy = true
+    statusListener('thinking', prompt.slice(0, 100))
     const deadline = AbortSignal.timeout(120000)
     try {
       for (let round = 0; round < 9; round++) {
@@ -117,10 +119,12 @@ export function createAssistant(database: Database.Database, fetcher: typeof fet
             return database.transaction(() => {
               if (state().pending) throw assistantError('已有待确认修改，请先处理', 409)
               const applied = applyChanges(database, args.changes as AssistantChange[], observed)
+              statusListener('waiting', '修改已执行，等待撤销或确定')
               return store(typeof args.answer === 'string' ? args.answer.slice(0, 20000) : '修改已执行，请核对后确定或撤销。', applied)
             })()
           }
           let result: unknown
+          statusListener('working', '正在读取工作台记录')
           try {
             const entity = entityOf(args.entity)
             let rows: Record<string, unknown>[]
@@ -147,13 +151,32 @@ export function createAssistant(database: Database.Database, fetcher: typeof fet
         }
       }
       throw assistantError('本次分析步骤过多，请明确对象或拆分请求；本次没有修改数据', 502)
-    } finally { busy = false }
+    } catch (error) {
+      statusListener('error', '处理失败，未应用本次修改')
+      if (error && typeof error === 'object' && 'code' in error && String(error.code).startsWith('SQLITE_CONSTRAINT')) throw assistantError('修改与现有记录或关联数据冲突，请调整要求后重试', 409)
+      throw error
+    }
+    finally { busy = false }
 
     function store(answer: string, changes: StoredChange[]): AssistantTurn {
       const row: TurnRow = { id: randomUUID(), prompt, answer, status: changes.length ? 'pending' : 'chat', changes: JSON.stringify(changes), created_at: new Date().toISOString() }
       database.prepare('INSERT INTO assistant_turns (id, prompt, answer, status, changes, created_at) VALUES (?, ?, ?, ?, ?, ?)').run(row.id, row.prompt, row.answer, row.status, row.changes, row.created_at)
+      if (!changes.length) statusListener('success', '对话完成')
       return turnDto(row)
     }
   }
-  return { state, config, saveConfig, chat, finish }
+  async function whisper(system: string, messages: { role: string; content: unknown }[]): Promise<string> {
+    const apiKey = key()
+    if (!apiKey) throw assistantError('请先在工作台 AI 助手中填写 DeepSeek API Key')
+    const response = await fetcher('https://api.deepseek.com/chat/completions', {
+      method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` }, signal: AbortSignal.timeout(30000),
+      body: JSON.stringify({ model: MODEL, thinking: { type: 'disabled' }, stream: false, max_tokens: 500, messages: [{ role: 'system', content: system.slice(0, 10000) }, ...messages.map(m => ({ role: m.role, content: Array.isArray(m.content) ? m.content.filter(v => v?.type === 'text').map(v => v.text).join('') : String(m.content ?? '') }))] }),
+    })
+    if (!response.ok) { await response.body?.cancel(); throw assistantError(`DeepSeek 请求失败（${response.status}）`, 502) }
+    const payload = await response.json() as Completion
+    const answer = payload.choices?.[0].message?.content?.trim()
+    if (!answer || payload.choices?.[0].finish_reason === 'length') throw assistantError('DeepSeek 未返回完整内容', 502)
+    return answer
+  }
+  return { state, config, saveConfig, chat, finish, whisper, readKey: key, setStatusListener: (listener: typeof statusListener) => { statusListener = listener } }
 }

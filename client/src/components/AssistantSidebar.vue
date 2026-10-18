@@ -30,6 +30,7 @@ async function refresh() {
     await loadAssistant()
     const latest = assistant.state.turns.at(-1)
     const revision = latest ? `${latest.id}-${latest.status}` : ''
+    if (!initialized && assistant.state.pending && route.query.aiTurn !== assistant.state.pending.id) await locate(assistant.state.pending.changes[0].target, assistant.state.pending)
     if (initialized && revision !== seenRevision && latest?.changes.length) {
       assistant.open = true
       await locate(latest.changes[0].target, latest)
@@ -81,8 +82,9 @@ onBeforeUnmount(() => { if (poll) clearInterval(poll); window.removeEventListene
 
 <template>
   <button class="assistant-launch" :class="{ active: assistant.open }" aria-label="打开 AI 助手" title="AI 助手 · Ctrl+Shift+K" @click="assistant.open = !assistant.open">
-    <el-icon :size="21"><ChatDotRound /></el-icon><span>AI 助手</span><i v-if="assistant.state.pending" />
+    <el-icon :size="21"><ChatDotRound /></el-icon><span>AI 助手</span><i v-if="assistant.state.pending" class="assistant-pending-dot" />
   </button>
+  <Teleport to="body">
   <aside v-if="assistant.open" class="assistant-panel" aria-label="AI 助手侧栏">
     <header class="assistant-head">
       <div><strong>小TELL</strong><small>DeepSeek V4.1 Flash</small></div>
@@ -122,12 +124,13 @@ onBeforeUnmount(() => { if (poll) clearInterval(poll); window.removeEventListene
       <div class="compose-actions"><small>Ctrl + Enter 发送</small><el-button type="primary" :icon="Position" :disabled="!canSend" :loading="assistant.sending" @click="submit">发送</el-button></div>
     </footer>
   </aside>
+  </Teleport>
 </template>
 
 <style scoped>
 .assistant-launch { display: flex; align-items: center; justify-content: center; gap: 8px; margin: 12px; padding: 11px 8px; color: var(--el-color-primary); border: 1px solid var(--el-border-color); border-radius: var(--el-border-radius-base); background: var(--el-fill-color-light); cursor: pointer; font: inherit; position: relative; }
 .assistant-launch.active { background: var(--el-color-primary-light-9); border-color: var(--el-color-primary); }
-.assistant-launch i { width: 7px; height: 7px; background: var(--el-color-warning); border-radius: 50%; }
+.assistant-pending-dot { width: 7px; height: 7px; background: var(--el-color-warning); border-radius: 50%; }
 .assistant-panel { position: fixed; inset: 12px 12px 12px auto; width: min(410px, calc(100vw - 24px)); z-index: 1800; background: var(--el-bg-color); color: var(--el-text-color-primary); border: 1px solid var(--el-border-color-light); border-radius: 14px; box-shadow: 0 16px 60px #0002; display: flex; flex-direction: column; overflow: hidden; }
 .assistant-head { display: flex; align-items: center; gap: 4px; padding: 16px; border-bottom: 1px solid var(--el-border-color-lighter); }
 .assistant-head > div { flex: 1; }.assistant-head strong { font-size: 18px; }.assistant-head small { display: block; font-size: 11px; color: var(--el-text-color-secondary); margin-top: 4px; }

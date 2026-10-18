@@ -3,6 +3,7 @@ import { computed } from 'vue'
 import { ElMessage } from 'element-plus'
 import { appearance, applyThemePreset, resetAppearance, themeLocksMode } from '../stores/appearance'
 import { THEME_PRESETS, themePreset } from '../utils/themePresets'
+import PetRuntime from '../components/PetRuntime.vue'
 
 /**
  * 设置：工作台级个性化配置，**全部实时生效**（主题预置/外观/圆角/字号/语言），
@@ -212,10 +213,12 @@ function reset() {
         </div>
       </div>
     </el-card>
+    <div class="pet-config-area"><PetRuntime settings /></div>
   </div>
 </template>
 
 <style scoped>
+.pet-config-area { grid-column: 1 / -1; }
 .page {
   display: flex;
   flex-direction: column;

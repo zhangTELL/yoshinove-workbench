@@ -67,6 +67,7 @@ function prepareValues(database: Database.Database, entity: AssistantEntity, inc
   }
   const out: Row = {}
   for (const [field, value] of Object.entries(values)) {
+    if (!Object.hasOwn(spec.fields, field)) throw assistantError(`${spec.label}不支持字段 ${field}`)
     const column = spec.fields[field]
     if (!column) throw assistantError(`${spec.label}不支持字段 ${field}`)
     if (['title', 'name', 'courseName', 'semester'].includes(field)) out[column] = text(value, field, true, 300).trim()
@@ -123,10 +124,11 @@ function prepareValues(database: Database.Database, entity: AssistantEntity, inc
     out.version = Number(before?.version ?? 0) + 1
     out.updated_at = now
   }
-  if (entity === 'score' && !('grade_point' in out)) out.grade_point = gradePoint(Number(merged.score))
+  if (entity === 'score' && !('grade_point' in out) && (!before || 'score' in out)) out.grade_point = gradePoint(Number(merged.score))
   if (entity === 'course' || entity === 'session') {
     const semester = database.prepare('SELECT * FROM semesters WHERE id = ?').get(merged.semester_id) as Row | undefined
     if (!semester) throw assistantError('学期不存在')
+    if (entity === 'course' && before && merged.semester_id !== before.semester_id && database.prepare('SELECT 1 FROM course_sessions WHERE course_id = ?').get(before.id)) throw assistantError('已有排课的课程不能直接更换学期，请先调整排课')
     if (entity === 'session') {
       const course = readRecord(database, 'course', Number(merged.course_id))
       if (!course || course.semester_id !== merged.semester_id) throw assistantError('课程不属于该学期')

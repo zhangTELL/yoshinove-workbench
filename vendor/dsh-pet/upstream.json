@@ -1,0 +1,727 @@
+{
+  "assets": [
+    {
+      "size": 26767,
+      "sha": "fe4cf60ff349e84ab4e5e0d4966ab39a4dc522fd",
+      "path": "assets/config.jsonc"
+    },
+    {
+      "size": 4083908,
+      "sha": "f7382c0d7152b09fc25f72c22b291701c09c95de",
+      "path": "assets/fonts/上首软糖体.ttf"
+    },
+    {
+      "size": 25058,
+      "sha": "e7c0ec2992648ff66e0e1ef05e6733a7f09825c7",
+      "path": "assets/logo.png"
+    },
+    {
+      "size": 160895,
+      "sha": "531fb6a128299044f1dbe785e35127507b7a089a",
+      "path": "assets/memes/Ciallo.png"
+    },
+    {
+      "size": 163283,
+      "sha": "68240e31081e26fc200fb8c24f1a44a79bca7c08",
+      "path": "assets/memes/token给妈妈保管.png"
+    },
+    {
+      "size": 220102,
+      "sha": "528f0c2e11bd1caefc1640dfd4b17e62d8d685aa",
+      "path": "assets/memes/假如给我三天多模态.png"
+    },
+    {
+      "size": 166797,
+      "sha": "baab4433d5a2bd402774e9d3f56baf3455d6b029",
+      "path": "assets/memes/先养着吧.png"
+    },
+    {
+      "size": 180872,
+      "sha": "91b6a7c6ba0e5e52d732e6f9a022da03debf39e9",
+      "path": "assets/memes/厉害了我的鲸.png"
+    },
+    {
+      "size": 197054,
+      "sha": "66db493ecf17546fca994891647e8372a4a6f8bd",
+      "path": "assets/memes/压力一只大肥鱼.png"
+    },
+    {
+      "size": 166125,
+      "sha": "0dc964bb0ffeb74a6291530cb9e9b2c70ed61198",
+      "path": "assets/memes/可爱.png"
+    },
+    {
+      "size": 242557,
+      "sha": "3b32abbdc10ed2d2f6fe32087ab63e7074783bb2",
+      "path": "assets/memes/吃白饭的大肥鱼.png"
+    },
+    {
+      "size": 145500,
+      "sha": "15d5c89989bfbc9a10f786d2b24f67333894e14e",
+      "path": "assets/memes/吃饱饱摸肚子.png"
+    },
+    {
+      "size": 107978,
+      "sha": "fde4178bca37af07db950119c86cb891ab9036ac",
+      "path": "assets/memes/哦鲸鲸.png"
+    },
+    {
+      "size": 130669,
+      "sha": "6862b8ec7f3726cdd5b7c90156a81033cb988893",
+      "path": "assets/memes/哪来的电脑病毒.png"
+    },
+    {
+      "size": 179969,
+      "sha": "6cd8e2bfeb421def19b8918c179d0df9196e14f0",
+      "path": "assets/memes/大师这个区是什么意思.png"
+    },
+    {
+      "size": 127882,
+      "sha": "2240747ddc5b53d9694dfd69e3f60b6998bb9293",
+      "path": "assets/memes/大烧货.png"
+    },
+    {
+      "size": 212012,
+      "sha": "1679a4f67d70de4937e2410553052cf892594bda",
+      "path": "assets/memes/大的药来了.png"
+    },
+    {
+      "size": 162265,
+      "sha": "2fe3ac367be0b0ff8a4b05fe1520eb43efcaf5ce",
+      "path": "assets/memes/大的要来啦.png"
+    },
+    {
+      "size": 170812,
+      "sha": "10126b698bdaf6f97aeef63ff3a28f8cd16690e9",
+      "path": "assets/memes/完蛋了把黄油删了.png"
+    },
+    {
+      "size": 189025,
+      "sha": "1f0e9d05954d64a8c7446c8301c78af48aab2297",
+      "path": "assets/memes/就一碗.png"
+    },
+    {
+      "size": 173093,
+      "sha": "35906732ad1d996aebedf9fa7e8f10f49cf3f009",
+      "path": "assets/memes/就骚了怎么滴吧.png"
+    },
+    {
+      "size": 163758,
+      "sha": "6fc8e529b5c30ecc90b9903da26fd55ffd31688b",
+      "path": "assets/memes/我不更新你们用什么.png"
+    },
+    {
+      "size": 176876,
+      "sha": "be653fc78a5fc75b34befbc404a224dda9d066be",
+      "path": "assets/memes/死掉了.png"
+    },
+    {
+      "size": 133276,
+      "sha": "a77cfd01375f527b08f2958a222b7d87b6badc1f",
+      "path": "assets/memes/深度睡眠.png"
+    },
+    {
+      "size": 273358,
+      "sha": "5bbf92d2931a3a94badc7afbdcfbd591a48679eb",
+      "path": "assets/memes/电死你.png"
+    },
+    {
+      "size": 201577,
+      "sha": "fae640e43c742d667ec4786a9cccb8ee4ab9da0d",
+      "path": "assets/memes/要不直接骂他.png"
+    },
+    {
+      "size": 161668,
+      "sha": "85f545757ae1e25fe7063cd22ba6d05b8bf8f6ba",
+      "path": "assets/memes/誓死践行开源精神.png"
+    },
+    {
+      "size": 172423,
+      "sha": "ca4cb105c43d6fe414539b60d8bd29bc69d3d385",
+      "path": "assets/memes/除了调情没啥用.png"
+    },
+    {
+      "size": 214868,
+      "sha": "f32b7fca76d7df6c84a39c1dcc58be166feea9ce",
+      "path": "assets/memes/鱼片有资源吗.png"
+    },
+    {
+      "size": 259701,
+      "sha": "f6ce799177aeb6414e0aa9c6dde55f7660c49ebb",
+      "path": "assets/memes/黎曼猜想没证明喵.png"
+    },
+    {
+      "size": 303,
+      "sha": "0bb6e9fca27449fb8ac25547f220f3d52a2d9f75",
+      "path": "assets/pic/cursor-grab.png"
+    },
+    {
+      "size": 276,
+      "sha": "0a1b6dbde9d303aacfab6e5bd6f92e795be02afa",
+      "path": "assets/pic/cursor-grabbing.png"
+    },
+    {
+      "size": 42815,
+      "sha": "ff70de90b768e1ff03f8cdad89ce75ab8ee41bf4",
+      "path": "assets/pic/notify-approval.png"
+    },
+    {
+      "size": 43283,
+      "sha": "c25012ad21e71ce244d5b8a527e04356d1fac9e0",
+      "path": "assets/pic/notify-done.png"
+    },
+    {
+      "size": 45840,
+      "sha": "941ae48a59dc4c491851d0f77145306df0a5d412",
+      "path": "assets/pic/notify-error.png"
+    },
+    {
+      "size": 46758,
+      "sha": "314853d62009170dbc2426a295d968899715b5df",
+      "path": "assets/pic/notify-question.png"
+    },
+    {
+      "size": 40188,
+      "sha": "d37256698b46cc18fa32584dfe0cfe08f79e39b8",
+      "path": "assets/pic/notify-test.png"
+    },
+    {
+      "size": 44939,
+      "sha": "38df856df973c1670662051bcda6a4732dfe73a9",
+      "path": "assets/pic/notify-truncated.png"
+    },
+    {
+      "size": 549316,
+      "sha": "a76228cb5f42fa159e3ec565b8ef969a7d289dca",
+      "path": "assets/webm/三球抛接.webm"
+    },
+    {
+      "size": 514704,
+      "sha": "63295b32e6a0522dac3840abb74a5af7b1431a08",
+      "path": "assets/webm/下五子棋.webm"
+    },
+    {
+      "size": 427005,
+      "sha": "3ba4edb2cc647c51edd41b5a6c71eeee8c418ed0",
+      "path": "assets/webm/东张西望.webm"
+    },
+    {
+      "size": 512341,
+      "sha": "48beff57ddc5b3c7e1c0387348e33ce8e3a5b819",
+      "path": "assets/webm/中秋赏月吃月饼.webm"
+    },
+    {
+      "size": 578915,
+      "sha": "390c504dfb0b56bb647f0253782a91ee705f8933",
+      "path": "assets/webm/优雅女仆舞.webm"
+    },
+    {
+      "size": 490318,
+      "sha": "013b69906a5c56b219bbd74986f973eea53e3675",
+      "path": "assets/webm/余额-分文不剩.webm"
+    },
+    {
+      "size": 319065,
+      "sha": "6c1dac8e3edddc02f4988e1c38e289177c335ecf",
+      "path": "assets/webm/余额-数金皱眉.webm"
+    },
+    {
+      "size": 383104,
+      "sha": "a85eb2206596c7031fbc64146df09f6e7b137aae",
+      "path": "assets/webm/余额-袋空如洗.webm"
+    },
+    {
+      "size": 530955,
+      "sha": "1bbe074a0bef1a7ef80508b3033269885edb6b2c",
+      "path": "assets/webm/余额-金袋叮当.webm"
+    },
+    {
+      "size": 387407,
+      "sha": "a52b686a7a3d801a98cccb81534eae2bfa7ac2b3",
+      "path": "assets/webm/余额-钱袋如常.webm"
+    },
+    {
+      "size": 622258,
+      "sha": "34212594a3b9fc03daf2ae742763e62dfe4b034f",
+      "path": "assets/webm/余额-钱袋满溢.webm"
+    },
+    {
+      "size": 432201,
+      "sha": "9f50ed6c3ba1a3f96b614e34ecaaf067ef6ab9cd",
+      "path": "assets/webm/偷吃零食被抓住.webm"
+    },
+    {
+      "size": 383960,
+      "sha": "47902f235c11fadd22134dd71d2fbcc3a36a13fc",
+      "path": "assets/webm/写代码.webm"
+    },
+    {
+      "size": 500314,
+      "sha": "b7aa9ce458b6e8d1c9513b5e4b059a07ca143f88",
+      "path": "assets/webm/写福字.webm"
+    },
+    {
+      "size": 620252,
+      "sha": "085fe6d74ddfc268670be32b7c3f78c6806b68f1",
+      "path": "assets/webm/凭空生花.webm"
+    },
+    {
+      "size": 981435,
+      "sha": "44722e0afb7ef4c1cd85c5c98eadd9b4ade2fea9",
+      "path": "assets/webm/动物环绕.webm"
+    },
+    {
+      "size": 442948,
+      "sha": "d2730f4c17e8ccb793973929c237b4fb32d8e3fc",
+      "path": "assets/webm/原地专心玩魔方.webm"
+    },
+    {
+      "size": 433769,
+      "sha": "9b258545a841647a11ffdc5882ad8b2bb808a343",
+      "path": "assets/webm/原地小憩沉眠.webm"
+    },
+    {
+      "size": 614526,
+      "sha": "d9b6611b32065a7937878a5467cd84d47a1be543",
+      "path": "assets/webm/原地左转奔跑.webm"
+    },
+    {
+      "size": 403033,
+      "sha": "c7e55e6f83c1847a45d81d60c04de2a167680c92",
+      "path": "assets/webm/原地敲击桌面互动.webm"
+    },
+    {
+      "size": 591446,
+      "sha": "d700e4fdd38e8795b88f6d81418e8fc196fe80ed",
+      "path": "assets/webm/原地漂浮踏步.webm"
+    },
+    {
+      "size": 619282,
+      "sha": "b45cdcb57340f12fff1b40ea9391bdd1d3c2845a",
+      "path": "assets/webm/原地跳跃抓碎头顶物品.webm"
+    },
+    {
+      "size": 505114,
+      "sha": "9a4ba01b33e6fba841a99ebf55631433651cdcd3",
+      "path": "assets/webm/原地蹲下玩玩具汽车.webm"
+    },
+    {
+      "size": 215047,
+      "sha": "67acb52f7e7c49e77b000730b3bff9a65fb21a10",
+      "path": "assets/webm/原地重力下蹲压缩.webm"
+    },
+    {
+      "size": 509462,
+      "sha": "150abd9011b3c9fec7229fa2b30418958040a7ad",
+      "path": "assets/webm/变鸽子.webm"
+    },
+    {
+      "size": 576307,
+      "sha": "0b96ac0de6fa7afe72f256148dd719698769043c",
+      "path": "assets/webm/可爱宅舞.webm"
+    },
+    {
+      "size": 574754,
+      "sha": "619722b50ea75fcb3c18b3de5d996ce4e87a7893",
+      "path": "assets/webm/吃Token.webm"
+    },
+    {
+      "size": 509816,
+      "sha": "c696cf2f61366cd9ba973aae1526dbf920c3d85d",
+      "path": "assets/webm/吃冰淇淋融化.webm"
+    },
+    {
+      "size": 495122,
+      "sha": "83618038d3d4fe98b9f42d0fd7ae1b7a24f686b3",
+      "path": "assets/webm/吃午餐.webm"
+    },
+    {
+      "size": 545299,
+      "sha": "f8e0774d6b4b38f27adfecdfc591dd40812f5e38",
+      "path": "assets/webm/吃大闸蟹.webm"
+    },
+    {
+      "size": 451257,
+      "sha": "7b4473435dfa219428f5bb2e1dbf34fe83b59190",
+      "path": "assets/webm/吃年糕.webm"
+    },
+    {
+      "size": 441484,
+      "sha": "6691dc43900e3f906b6576cc6eb7e0f23b0e2702",
+      "path": "assets/webm/吃早餐.webm"
+    },
+    {
+      "size": 741965,
+      "sha": "14f9eee2a361a592fd55c95979f5810b7b8dcd03",
+      "path": "assets/webm/吃晚餐.webm"
+    },
+    {
+      "size": 437152,
+      "sha": "eac65950006cf0814e6e4f1ebe1c73b9e36a8791",
+      "path": "assets/webm/吃汤圆.webm"
+    },
+    {
+      "size": 459590,
+      "sha": "0f400023c2f036e6edc28033083d49f68686d347",
+      "path": "assets/webm/吃白饭.webm"
+    },
+    {
+      "size": 446268,
+      "sha": "6ad057c473cbaf209de8d4ec91781d9bc759cda9",
+      "path": "assets/webm/吃粽子.webm"
+    },
+    {
+      "size": 469809,
+      "sha": "def3fa70022f6b728f0d0b3ebbfcff601c406c57",
+      "path": "assets/webm/吃糖葫芦.webm"
+    },
+    {
+      "size": 460665,
+      "sha": "c20156c0de0863832d7bc10fb65153559de388be",
+      "path": "assets/webm/吃腊八粥.webm"
+    },
+    {
+      "size": 482918,
+      "sha": "ffa2c36e86e9056a7e965c73364a50c1fd8bb192",
+      "path": "assets/webm/吃西瓜.webm"
+    },
+    {
+      "size": 468951,
+      "sha": "cc54c1f82bb5c4b8e366fba6433b6534bedcf4fc",
+      "path": "assets/webm/吃重阳糕.webm"
+    },
+    {
+      "size": 489038,
+      "sha": "ac71008a07686f858627e7f7f69e77448941bb97",
+      "path": "assets/webm/吃长寿面.webm"
+    },
+    {
+      "size": 377524,
+      "sha": "00031236d476501f71b3f03f978a4b79952e5097",
+      "path": "assets/webm/吃青团.webm"
+    },
+    {
+      "size": 554828,
+      "sha": "2dee24954bae172a20ef1e0d44b34d7105872851",
+      "path": "assets/webm/吃饺子.webm"
+    },
+    {
+      "size": 751040,
+      "sha": "3a632cd91c409ed1b889f0313ae1394113c0d7c0",
+      "path": "assets/webm/吹气球.webm"
+    },
+    {
+      "size": 768350,
+      "sha": "fd57f820116b72c35e7b50ee3cdb5c20e775062b",
+      "path": "assets/webm/吹笛子.webm"
+    },
+    {
+      "size": 424352,
+      "sha": "63da356fa373ecf6256bc8f4deb9709577e2f18e",
+      "path": "assets/webm/哈欠连天.webm"
+    },
+    {
+      "size": 519196,
+      "sha": "ce8e8be3b7e5c0dfbdebf15f5a8fd70e2836ee0f",
+      "path": "assets/webm/堆雪人.webm"
+    },
+    {
+      "size": 806998,
+      "sha": "ab57e48e28d0e0fb832549e1b546bed28f2eb3df",
+      "path": "assets/webm/大口吃零食.webm"
+    },
+    {
+      "size": 365712,
+      "sha": "0bcac6ada85e78527fcce020db73bf0b6eff41d3",
+      "path": "assets/webm/女仆屈膝礼仪.webm"
+    },
+    {
+      "size": 585715,
+      "sha": "915feb453f11f0267693109b3e847a850cdb1ec7",
+      "path": "assets/webm/小幅度原地360度旋转展示.webm"
+    },
+    {
+      "size": 605350,
+      "sha": "2de1533cd0f2d7a72e0099f9ac6f816353f3912f",
+      "path": "assets/webm/小提琴演奏.webm"
+    },
+    {
+      "size": 471725,
+      "sha": "7b9459a1efdf4155f5ddd3beb07936fcc5c8a7ed",
+      "path": "assets/webm/工作状态-原地踱步张望.webm"
+    },
+    {
+      "size": 198937,
+      "sha": "653ef82b71d52faa1d26a014afb7764f778926f7",
+      "path": "assets/webm/工作状态-垂头叹气冒汗.webm"
+    },
+    {
+      "size": 475613,
+      "sha": "32bc6dbf65a7f1afa403520c3dd37980ca353e5f",
+      "path": "assets/webm/工作状态-忙碌点按.webm"
+    },
+    {
+      "size": 408849,
+      "sha": "51bc3bb2fb894e6f1499974d62a3d93592f91859",
+      "path": "assets/webm/工作状态-思考冒泡.webm"
+    },
+    {
+      "size": 362510,
+      "sha": "af694fb0013cbc0aa5313ab0221f417b4efdb14a",
+      "path": "assets/webm/工作状态-清点归档.webm"
+    },
+    {
+      "size": 488024,
+      "sha": "edd6645a8ee9b222c720fb20cfff3b715e92db9b",
+      "path": "assets/webm/工作状态-雀跃庆祝.webm"
+    },
+    {
+      "size": 441437,
+      "sha": "fd64a428a2be1d3b4ff6cd7f9867dfe978ba0bbb",
+      "path": "assets/webm/待机呼吸休闲.webm"
+    },
+    {
+      "size": 584008,
+      "sha": "01bd5c202583ef634de424904e76f2906f7289d3",
+      "path": "assets/webm/悠闲哼歌.webm"
+    },
+    {
+      "size": 461997,
+      "sha": "2e33efead726dff587fa0ca46adef5ecb5d0b7c9",
+      "path": "assets/webm/扑克魔术.webm"
+    },
+    {
+      "size": 454028,
+      "sha": "e5c5759895274e1f7c4017dce9c9c51beec44e51",
+      "path": "assets/webm/打瞌睡被惊醒.webm"
+    },
+    {
+      "size": 521068,
+      "sha": "1a0cd6a9447c3a36b068fb9db46fd56447520a73",
+      "path": "assets/webm/抽陀螺.webm"
+    },
+    {
+      "size": 517803,
+      "sha": "01445f708db3e19b707e6d1609902dd4da9c0ade",
+      "path": "assets/webm/拆礼物.webm"
+    },
+    {
+      "size": 486358,
+      "sha": "7e2976e00317dfd681279890ab48f3a68ceb03f9",
+      "path": "assets/webm/插茱萸赏菊.webm"
+    },
+    {
+      "size": 510022,
+      "sha": "bbb9b8344e6c30579c967a27831ad85f19db1002",
+      "path": "assets/webm/摇扇纳凉.webm"
+    },
+    {
+      "size": 348432,
+      "sha": "466044675ea20b863db850373aab8a6c2b7c11a8",
+      "path": "assets/webm/撸猫.webm"
+    },
+    {
+      "size": 472277,
+      "sha": "ca07f8792572e3b182b2077b768fbcf9ece4ee91",
+      "path": "assets/webm/收红包.webm"
+    },
+    {
+      "size": 594144,
+      "sha": "ca554c0df5fb9cd2f35ad9eb54957b9e1dfcd2cf",
+      "path": "assets/webm/放孔明灯.webm"
+    },
+    {
+      "size": 379124,
+      "sha": "2827fd308393a036201bc85dca0a9b2cc9f3ee13",
+      "path": "assets/webm/放河灯.webm"
+    },
+    {
+      "size": 1330462,
+      "sha": "3a1bcd38b00b170b619e42b76ab8c9ea9225903a",
+      "path": "assets/webm/放烟花.webm"
+    },
+    {
+      "size": 770134,
+      "sha": "000eba2f49a11beb21aa63ddc64c4d1522afa27e",
+      "path": "assets/webm/放风筝.webm"
+    },
+    {
+      "size": 524724,
+      "sha": "abd198a8d1e4e67f09d86e4a5bdc99859e61098e",
+      "path": "assets/webm/整体换装试色.webm"
+    },
+    {
+      "size": 588163,
+      "sha": "e347b7574b4dca0d65bdd34bf9af0a176fbb15a1",
+      "path": "assets/webm/是啊，吃什么.webm"
+    },
+    {
+      "size": 425460,
+      "sha": "66581dbd88c72bcba960d551b9cdcb0239da7d2f",
+      "path": "assets/webm/晨间刷牙.webm"
+    },
+    {
+      "size": 466547,
+      "sha": "d3e99cf6d8694b5e83a3957793f8fc7a0fc2cc2a",
+      "path": "assets/webm/涮火锅.webm"
+    },
+    {
+      "size": 433031,
+      "sha": "5a40d5bfdfa818a1df37cef6405f10cd8b71961c",
+      "path": "assets/webm/深度思考碎碎念.webm"
+    },
+    {
+      "size": 392336,
+      "sha": "77c6461a1f8ced2dc7272f44192f37dd682becf8",
+      "path": "assets/webm/点击回应-傲娇生气.webm"
+    },
+    {
+      "size": 421669,
+      "sha": "f60556f06c386cfb569f76b0cfa2e34e34fdc362",
+      "path": "assets/webm/点击回应-元气挥手.webm"
+    },
+    {
+      "size": 538281,
+      "sha": "499b73c42844bd0268bff9044e0523fcae1c1b27",
+      "path": "assets/webm/点击回应-害羞惊讶.webm"
+    },
+    {
+      "size": 538110,
+      "sha": "fb614abf8d19c650fb5bd4727b2585282733a996",
+      "path": "assets/webm/点击回应-开心跃动.webm"
+    },
+    {
+      "size": 425393,
+      "sha": "d896eb9a91ca8eafa7f0af35a3073dc04a397742",
+      "path": "assets/webm/点击回应-挠痒咯咯笑.webm"
+    },
+    {
+      "size": 504127,
+      "sha": "f9ead4a5e1ab6cb702bd349794264f398f470867",
+      "path": "assets/webm/照镜子.webm"
+    },
+    {
+      "size": 523346,
+      "sha": "70cabac39a03ab1738540fdb9a9581ae523de463",
+      "path": "assets/webm/玩水枪.webm"
+    },
+    {
+      "size": 525022,
+      "sha": "a3375c2980634529e84ba2ee61a57776ea8205e9",
+      "path": "assets/webm/玩游戏气急败坏.webm"
+    },
+    {
+      "size": 352213,
+      "sha": "822a7c41f795906ca46e2f1757c63e6633d39214",
+      "path": "assets/webm/用鲸鱼尾巴拍打地面.webm"
+    },
+    {
+      "size": 326752,
+      "sha": "4afcaf7459e3b27b30252648b388e9cd3296807f",
+      "path": "assets/webm/碎碎念-发呆碎碎念.webm"
+    },
+    {
+      "size": 364946,
+      "sha": "8b7b357f01a9e5cf733dce28f32e8f94be4a030d",
+      "path": "assets/webm/碎碎念-对屏碎碎念.webm"
+    },
+    {
+      "size": 350436,
+      "sha": "343513cf0d5583b5f476080d5082f3f5e01588b8",
+      "path": "assets/webm/碎碎念-擦桌碎碎念.webm"
+    },
+    {
+      "size": 480887,
+      "sha": "f78881f4e996d5160ce4910ed06646b5b9d5bd60",
+      "path": "assets/webm/穿针乞巧.webm"
+    },
+    {
+      "size": 632110,
+      "sha": "b16d549ec2572f5d693bdc7691e3247544ccb88e",
+      "path": "assets/webm/舞狮头.webm"
+    },
+    {
+      "size": 644126,
+      "sha": "41c61429405139344b13875135468edb25b6f28e",
+      "path": "assets/webm/荡秋千.webm"
+    },
+    {
+      "size": 421990,
+      "sha": "cae5ebbca8634591a49daf5f7a4bc56fa369a7bf",
+      "path": "assets/webm/萌化小幽灵.webm"
+    },
+    {
+      "size": 482896,
+      "sha": "eb62a155d056d35a16b1d4e961d5ff10c109f684",
+      "path": "assets/webm/蓝鲸现世.webm"
+    },
+    {
+      "size": 852828,
+      "sha": "6f39bb90fd8349d5f23d0912a4bc01c2c06470f2",
+      "path": "assets/webm/蝴蝶蜜蜂环绕头顶开花.webm"
+    },
+    {
+      "size": 596902,
+      "sha": "6ff80136295718a2e866e70d90fa8a0bada333dd",
+      "path": "assets/webm/螃蟹走路.webm"
+    },
+    {
+      "size": 282771,
+      "sha": "a7afe71ed72990bbace7026abb1ef69ae7e3706c",
+      "path": "assets/webm/被吓一跳.webm"
+    },
+    {
+      "size": 766832,
+      "sha": "1e35fff171fb8856bd89de91329ef357c7d33e65",
+      "path": "assets/webm/被落叶淹没.webm"
+    },
+    {
+      "size": 464764,
+      "sha": "728f04b2997aa9ec4bdb87d1b9b14d7910bc7fd6",
+      "path": "assets/webm/被鼠标拖拽悬空反馈.webm"
+    },
+    {
+      "size": 818456,
+      "sha": "1217c9625c3a682732bc4398108ce7c4ae2a07f6",
+      "path": "assets/webm/装点圣诞树.webm"
+    },
+    {
+      "size": 483293,
+      "sha": "3a17ac14fba449e8d7bb0e0d38085825b068a9e1",
+      "path": "assets/webm/讨糖南瓜灯.webm"
+    },
+    {
+      "size": 396987,
+      "sha": "689e04f120f9f678a9424dac6cadf4b6a0bd6e6b",
+      "path": "assets/webm/超大伸懒腰.webm"
+    },
+    {
+      "size": 531015,
+      "sha": "1a0586564e58e6a60e4f151d2bf161e975673e30",
+      "path": "assets/webm/踢毽子.webm"
+    },
+    {
+      "size": 542928,
+      "sha": "596558b14cacee0d96f5e9d3942fd5731be49718",
+      "path": "assets/webm/轻快摇摆舞.webm"
+    },
+    {
+      "size": 447726,
+      "sha": "d0c1bc670b74450e53019b36366edbe54056a363",
+      "path": "assets/webm/轻快记录.webm"
+    },
+    {
+      "size": 697580,
+      "sha": "b578f4c951a11c3fe97bdbd609315d3e72fe6827",
+      "path": "assets/webm/骑木马.webm"
+    },
+    {
+      "size": 452096,
+      "sha": "4848e28f2c4fde323025a03a7980b75f1c56f98e",
+      "path": "assets/webm/鲸鱼吐泡泡特效.webm"
+    }
+  ],
+  "version": "0.3.7",
+  "repository": "PC2005-cloud/dsh-pet",
+  "commit": "1dbe748c0b37a66a9fac6b9789ce71cf7b4a2ab6"
+}
