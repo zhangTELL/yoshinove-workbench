@@ -23,6 +23,7 @@ export interface AssistantAppliedChange {
 }
 export interface AssistantTurn {
   id: string
+  sessionId: string
   prompt: string
   answer: string
   status: 'pending' | 'confirmed' | 'undone' | 'chat'
@@ -30,13 +31,22 @@ export interface AssistantTurn {
   createdAt: string
 }
 export interface AssistantState {
+  sessionId: string
+  sessions: AssistantSession[]
   turns: AssistantTurn[]
   pending: AssistantTurn | null
   busy: boolean
+}
+export interface AssistantSession {
+  id: string
+  title: string
+  createdAt: string
 }
 export interface AssistantConfig {
   configured: boolean
   keyMask: string
   model: string
   modelLabel: string
+  name: string
+  petDoubleClick: 'dialog' | 'sidebar'
 }

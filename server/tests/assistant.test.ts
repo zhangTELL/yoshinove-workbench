@@ -7,6 +7,7 @@ import Database from 'better-sqlite3'
 import Fastify from 'fastify'
 import { assistantRoutes } from '../src/routes/assistant.js'
 import { createAssistant } from '../src/services/assistant.js'
+import { ensureAssistantSchema } from '../src/db/assistantSchema.js'
 
 const temporary = mkdtempSync(join(tmpdir(), 'yw-assistant-test-'))
 process.env.WORKBENCH_DATA_DIR = temporary
@@ -33,7 +34,7 @@ function setup(steps: Step[]) {
   const seed = () => database.prepare("INSERT INTO countdowns (title,date,category,note) VALUES ('实验报告','2026-11-01','作业','原备注')").run()
   const key = () => app.inject({ method: 'PUT', url: '/api/assistant/config', payload: { apiKey: 'sk-test-only-not-a-real-key' } })
   const chat = () => app.inject({ method: 'POST', url: '/api/assistant/chat', payload: { message: '把实验报告改到11月3日' } })
-  return { database, app, requests, seed, key, chat }
+  return { database, app, requests, seed, key, chat, fetcher }
 }
 const updateCountdown = () => [call('search_records', { entity: 'countdown', query: '实验报告' }), call('apply_changes', { answer: '已调整日期，请核对。', changes: [{ entity: 'countdown', action: 'update', id: 1, values: { date: '2026-11-03' } }] })]
 
@@ -161,4 +162,83 @@ test('已有打卡日期不被重复插入，原型字段不能绕过允许字�
   assert.equal(response.json().message.includes('冲突'), true)
   const s2 = setup([call('apply_changes', { changes: [{ entity: 'note', action: 'create', values: { title: '测试', toString: '不应写入' } }] })]); t.after(() => s2.app.close())
   await s2.key(); assert.equal((await s2.chat()).statusCode, 400)
+})
+
+test('新会话隔离上下文，历史可切回，当前会话与标题在服务重建后保留', async t => {
+  const reply = { choices: [{ finish_reason: 'stop', message: { role: 'assistant', content: '已记住本会话。' } }] }
+  const s = setup([reply, reply]); t.after(() => s.app.close()); await s.key()
+  const first = (await s.chat()).json().turn
+  const created = await s.app.inject({ method: 'POST', url: '/api/assistant/sessions' })
+  assert.equal(created.statusCode, 200, created.body)
+  const next = created.json()
+  assert.notEqual(next.sessionId, first.sessionId)
+  assert.equal(next.turns.length, 0)
+  assert.equal(next.sessions.length, 2)
+  const second = (await s.app.inject({ method: 'POST', url: '/api/assistant/chat', payload: { message: '这是第二个会话' } })).json().turn
+  const messages = s.requests[1].messages as { role: string; content: string }[]
+  assert.equal(messages.length, 2, '新会话不能附带旧消息')
+  assert.equal(messages[1].content, '这是第二个会话')
+  const restored = createAssistant(s.database).state()
+  assert.equal(restored.sessionId, second.sessionId)
+  assert.equal(restored.sessions.find(session => session.id === second.sessionId)?.title, '这是第二个会话')
+  const previous = await s.app.inject({ method: 'PUT', url: '/api/assistant/session', payload: { id: first.sessionId } })
+  assert.equal(previous.json().turns[0].id, first.id)
+  const invalid = await s.app.inject({ method: 'PUT', url: '/api/assistant/session', payload: { id: 'missing' } })
+  assert.equal(invalid.statusCode, 404)
+  assert.equal(createAssistant(s.database).state().sessionId, first.sessionId)
+})
+
+test('待确认修改阻止新建和切换会话，撤销后可以开始新会话', async t => {
+  const s = setup(updateCountdown()); t.after(() => s.app.close()); await s.key(); s.seed()
+  const turn = (await s.chat()).json().turn
+  assert.equal((await s.app.inject({ method: 'POST', url: '/api/assistant/sessions' })).statusCode, 409)
+  assert.equal((await s.app.inject({ method: 'PUT', url: '/api/assistant/session', payload: { id: 'main' } })).statusCode, 409)
+  assert.equal(createAssistant(s.database).state().sessions.length, 1)
+  await s.app.inject({ method: 'POST', url: `/api/assistant/turns/${turn.id}/undo` })
+  assert.equal((await s.app.inject({ method: 'POST', url: '/api/assistant/sessions' })).statusCode, 200)
+})
+
+test('名称和双击偏好独立保存，非法偏好不写入 Key，模型使用自定义称呼', async t => {
+  const s = setup([{ choices: [{ finish_reason: 'stop', message: { role: 'assistant', content: '你好。' } }] }]); t.after(() => s.app.close())
+  const initial = (await s.app.inject('/api/assistant/config')).json()
+  assert.equal(initial.name, 'AI助手')
+  assert.equal(initial.petDoubleClick, 'dialog')
+  await s.key()
+  const saved = await s.app.inject({ method: 'PUT', url: '/api/assistant/config', payload: { name: '小星', petDoubleClick: 'sidebar' } })
+  assert.equal(saved.json().name, '小星')
+  assert.equal(saved.json().configured, true)
+  assert.equal((await s.app.inject({ method: 'PUT', url: '/api/assistant/config', payload: { name: '', apiKey: '' } })).statusCode, 400)
+  assert.equal((await s.app.inject('/api/assistant/config')).json().configured, true)
+  assert.equal((await s.app.inject({ method: 'PUT', url: '/api/assistant/config', payload: { petDoubleClick: 'invalid' } })).statusCode, 400)
+  await s.chat()
+  assert.match(JSON.stringify(s.requests[0].messages), /小星/)
+  assert.doesNotMatch(JSON.stringify(s.requests[0].messages), /小TELL/)
+})
+
+test('旧对话表平滑迁移，待确认记录和历史不丢失，迁移重复执行安全', () => {
+  const database = new Database(':memory:')
+  try {
+    database.exec("CREATE TABLE assistant_turns(id TEXT PRIMARY KEY,prompt TEXT,answer TEXT,status TEXT,changes TEXT,created_at TEXT); INSERT INTO assistant_turns VALUES('old','旧问题','旧回复','pending','[]','2026-10-01');")
+    ensureAssistantSchema(database)
+    ensureAssistantSchema(database)
+    const old = database.prepare('SELECT * FROM assistant_turns').get() as { session_id: string; status: string; answer: string }
+    assert.equal(old.session_id, 'main')
+    assert.equal(old.status, 'pending')
+    assert.equal(old.answer, '旧回复')
+    assert.equal((database.prepare('SELECT COUNT(*) AS n FROM assistant_sessions').get() as { n: number }).n, 1)
+  } finally { database.close() }
+})
+
+test('桌宠新会话不注入旧记忆，处理消息期间不能切换会话', async t => {
+  let release!: () => void
+  const gate = new Promise<void>(resolve => { release = resolve })
+  const s = setup([async () => { await gate; return Response.json({ choices: [{ finish_reason: 'stop', message: { role: 'assistant', content: '当前会话回复。' } }] }) }])
+  t.after(() => s.app.close()); await s.key()
+  const service = createAssistant(s.database, s.fetcher)
+  service.selectSession()
+  const request = service.chat('新问题', {}, '', [{ role: 'user', content: '旧桌宠私密记忆' }, { role: 'assistant', content: '旧回答' }])
+  assert.throws(() => service.selectSession(), /正在处理/)
+  release()
+  await request
+  assert.doesNotMatch(JSON.stringify(s.requests), /旧桌宠私密记忆/)
 })

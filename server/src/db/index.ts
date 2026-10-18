@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url'
 import { textKeyOf, workKeyOf } from '../services/chaoxingKey.js'
 import * as schema from './schema.js'
 import { COMPARISON_SCHEMA_SQL } from './comparisonSchema.js'
-import { ASSISTANT_SCHEMA_SQL } from './assistantSchema.js'
+import { ensureAssistantSchema } from './assistantSchema.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const dataDir = process.env.WORKBENCH_DATA_DIR || path.resolve(__dirname, '../../data')
@@ -18,7 +18,7 @@ sqlite.pragma('foreign_keys = ON')
 
 /** 单机单用户应用：启动时直接确保全部表存在，避免引入迁移工具复杂度 */
 export function ensureSchema() {
-  sqlite.exec(ASSISTANT_SCHEMA_SQL)
+  ensureAssistantSchema(sqlite)
   sqlite.exec(`
     CREATE TABLE IF NOT EXISTS settings (
       key TEXT PRIMARY KEY,

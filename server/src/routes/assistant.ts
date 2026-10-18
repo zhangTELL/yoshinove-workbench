@@ -5,8 +5,14 @@ import { createAssistant } from '../services/assistant.js'
 export const assistantRoutes: FastifyPluginAsync<{ database: Database.Database; fetcher?: typeof fetch; assistant?: ReturnType<typeof createAssistant> }> = async (app, options) => {
   const assistant = options.assistant ?? createAssistant(options.database, options.fetcher)
   app.get('/api/assistant/config', async () => assistant.config())
-  app.put('/api/assistant/config', async req => assistant.saveConfig((req.body as { apiKey?: unknown })?.apiKey))
+  app.put('/api/assistant/config', async req => assistant.saveConfig((req.body ?? {}) as { apiKey?: unknown; name?: unknown; petDoubleClick?: unknown }))
   app.get('/api/assistant/state', async () => assistant.state())
+  app.post('/api/assistant/sessions', async () => assistant.selectSession())
+  app.put('/api/assistant/session', async req => {
+    const id = (req.body as { id?: unknown })?.id
+    if (typeof id !== 'string') throw Object.assign(new Error('请选择会话'), { statusCode: 400 })
+    return assistant.selectSession(id)
+  })
   app.post('/api/assistant/chat', async req => {
     const body = req.body as { message?: unknown; context?: unknown }
     return { turn: await assistant.chat(body?.message, body?.context) }
