@@ -9,6 +9,8 @@ import { del, get, post, put } from '../api/http'
 import { escapeHtml } from '../utils/escapeHtml'
 import { useUnsavedChanges } from '../composables/useUnsavedChanges'
 import { useCompactLayout } from '../composables/useCompactLayout'
+import { useRoute } from 'vue-router'
+const route = useRoute()
 
 interface NoteMeta {
   id: number
@@ -135,6 +137,10 @@ async function loadInitial() {
     await loadList()
     await loadCourseOptions()
     await loadThemes()
+    if (route.query.aiEntity === 'note') {
+      const selected = notes.value.find(note => note.id === Number(route.query.aiId))
+      if (selected) await openNote(selected)
+    }
   } finally {
     loading.value = false
   }
@@ -500,7 +506,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
 
     <!-- 右侧：编辑器 -->
     <main class="editor-pane" v-loading="loading">
-      <div v-show="currentId !== null" class="editor-wrap">
+      <div v-show="currentId !== null" class="editor-wrap" data-ai-context="true" data-ai-entity="note" :data-ai-id="currentId">
         <div class="editor-toolbar">
           <el-input v-model="title" class="note-title-input" placeholder="笔记标题" aria-label="笔记标题" />
           <el-popover trigger="click" placement="bottom-end" :width="320">

@@ -3,6 +3,7 @@ import multipart from '@fastify/multipart'
 import Fastify from 'fastify'
 import { ensureSchema, sqlite } from './db/index.js'
 import { aiRoutes } from './routes/ai.js'
+import { assistantRoutes } from './routes/assistant.js'
 import { chaoxingRoutes } from './routes/chaoxing.js'
 import { comparisonRoutes } from './routes/comparisons.js'
 import { importRoutes } from './routes/import.js'
@@ -64,6 +65,7 @@ async function main() {
   await app.register(toolRoutes)
   await app.register(noteRoutes)
   await app.register(aiRoutes)
+  await app.register(assistantRoutes, { database: sqlite })
   await app.register(comparisonRoutes, { database: sqlite })
   await app.register(promptRoutes)
   await app.register(projectRoutes)
@@ -71,7 +73,7 @@ async function main() {
   // 服务关闭时把项目预览服务器的监听口一并关掉
   app.addHook('onClose', async () => stopAllPreviews())
 
-  startScheduler()
+  if (process.env.WORKBENCH_DISABLE_SCHEDULER !== '1') startScheduler()
 
   app.get('/api/health', async () => ({ ok: true, ts: Date.now() }))
 

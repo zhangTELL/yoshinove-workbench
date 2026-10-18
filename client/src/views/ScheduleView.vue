@@ -335,8 +335,10 @@ onMounted(async () => {
   if (!route.query.tab) void router.replace({ path: '/schedule', query: { tab: SCHEDULE_TABS[0] } })
   await loadDisplaySettings()
   await loadSemesters()
+  if (route.query.semesterId && semesters.value.some(sem => sem.id === Number(route.query.semesterId))) currentSemesterId.value = Number(route.query.semesterId)
   await loadSchedule()
   guessCurrentWeek()
+  if (route.query.week && Number(route.query.week) >= 1 && Number(route.query.week) <= totalWeeks.value) currentWeek.value = Number(route.query.week)
   await loadReminderRules()
 })
 
@@ -1106,6 +1108,11 @@ async function removeSession() {
 
 <template>
   <div class="page">
+    <el-card v-if="route.query.aiEntity === 'course' && schedule.courses.some(c => c.id === Number(route.query.aiId))" data-ai-entity="course" :data-ai-id="route.query.aiId" style="margin-bottom: 18px">
+      <template v-for="course in schedule.courses.filter(c => c.id === Number(route.query.aiId))" :key="course.id">
+        <strong>{{ course.name }}</strong><p>{{ course.teacher || '未填写教师' }} · {{ course.credit }} 学分</p><p v-if="course.note">{{ course.note }}</p>
+      </template>
+    </el-card>
     <!-- ===== 课程表板块 ===== -->
     <div v-show="activeTab === 'grid'" class="tab-pane">
     <!-- 顶部工具栏 -->
@@ -1237,6 +1244,8 @@ async function removeSession() {
               v-for="{ item, lane, laneCount } in day.placed"
               :key="item.id"
               class="course-card"
+              data-ai-entity="session"
+              :data-ai-id="item.id"
               :class="{ 'is-dragging': dragState?.sessionId === item.id, 'is-swapped': !!item.swapFrom }"
               :style="cardStyle(item, lane, laneCount)"
               :title="`${item.course.name}\n${item.room}\n${item.course.teacher}\n${weeksText(item.weeks, item.weekParity)}周\n${item.swapFrom ? '（本卡是调休换来的，不能拖动）' : '可拖动到别的格子改时间'}`"
@@ -1245,7 +1254,7 @@ async function removeSession() {
               @dragstart="onCardDragStart(item, dayIdx, $event)"
               @dragend="onCardDragEnd"
             >
-              <div class="course-name" :style="{ color: item.course.color }">{{ item.course.name }}</div>
+              <div class="course-name" data-ai-entity="course" :data-ai-id="item.course.id" :style="{ color: item.course.color }">{{ item.course.name }}</div>
               <div class="course-room">{{ item.room }}</div>
               <div v-if="item.course.teacher" class="course-teacher">{{ item.course.teacher }}</div>
               <div v-if="item.weekParity !== 'all'" class="course-parity">

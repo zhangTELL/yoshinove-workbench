@@ -8,6 +8,8 @@ export const leaveDialog = {
   label: ref(''),
 }
 let resolveChoice: ((choice: 'save' | 'discard' | 'stay') => void) | undefined
+const activeEditors = new Set<Ref<boolean>>()
+export const hasUnsavedEdits = () => [...activeEditors].some(dirty => dirty.value)
 
 export function chooseLeave(choice: 'save' | 'discard' | 'stay') {
   if (leaveDialog.saving.value) return
@@ -16,6 +18,8 @@ export function chooseLeave(choice: 'save' | 'discard' | 'stay') {
 }
 
 export function useUnsavedChanges(dirty: Ref<boolean>, save: () => Promise<boolean>, label: string, guardUpdate = false) {
+  onMounted(() => activeEditors.add(dirty))
+  onBeforeUnmount(() => activeEditors.delete(dirty))
   async function confirmLeave(): Promise<boolean> {
     if (!dirty.value) return true
     if (leaveDialog.visible.value) return false

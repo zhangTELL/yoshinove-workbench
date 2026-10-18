@@ -8,6 +8,7 @@
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test:comparisons": "tsx --test tests/comparisons.test.ts",
+    "test:assistant": "tsx --test tests/assistant.test.ts",
     "start": "node dist/index.js"
   },
   "dependencies": {

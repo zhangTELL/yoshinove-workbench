@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { termOf, type Semester } from '@wb/shared'
 import { computed, onMounted, ref } from 'vue'
+import { useRoute } from 'vue-router'
+const route = useRoute()
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Delete, Refresh } from '@element-plus/icons-vue'
 import { del, get, post, put } from '../api/http'
@@ -35,6 +37,7 @@ const syncing = ref(false)
 const filterCourse = ref('全部')
 const filterStatus = ref<'进行中' | '已提交' | '全部'>('进行中')
 const semesterFilter = ref<'current' | 'all'>('current')
+if (route.query.aiEntity === 'homework') { filterStatus.value = '全部'; semesterFilter.value = 'all' }
 /** 本学期课表里的课程名（学期筛选用） */
 const currentCourseNames = ref<Set<string>>(new Set())
 /** 当前学期的学期标签（与 termOf 同口径，用于课程分组） */
@@ -318,7 +321,7 @@ async function removeHomework(h: Homework) {
           :description="filterStatus === '进行中' ? '没有未提交的作业，太棒了 🎉' : '当前筛选条件下没有作业'"
         />
         <div v-else class="hw-list">
-          <div v-for="h in filtered" :key="h.id" class="hw-item">
+          <div v-for="h in filtered" :key="h.id" class="hw-item" data-ai-entity="homework" :data-ai-id="h.id">
             <div class="hw-main">
               <div class="hw-title">
                 <el-tag size="small" type="info">{{ h.courseName }}</el-tag>

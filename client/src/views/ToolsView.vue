@@ -15,6 +15,7 @@ import { pomoData, pomoRunning, pomoPaused, pomoMode, pomoWorkMin, pomoBreakMin,
 // 栏目切换由左侧主导航的「日常工具」折叠分组控制，本页只按 ?tab= 渲染对应板块
 const route = useRoute()
 const router = useRouter()
+const scoreRowClass = ({ row }: { row: { id: number } }) => `ai-score-${row.id}`
 const TOOL_KEYS = ['runs', 'countdown', 'scores', 'pomodoro'] as const
 
 const activeTab = computed(() => {
@@ -49,6 +50,11 @@ interface RunStats {
 const runStats = ref<RunStats | null>(null)
 const runYear = ref(new Date().getFullYear())
 const runMonth = ref(new Date().getMonth())
+if (route.query.aiEntity === 'run' && /^\d{4}-\d{2}-\d{2}$/.test(String(route.query.aiDate))) {
+  const focusedDate = new Date(String(route.query.aiDate) + 'T00:00:00')
+  runYear.value = focusedDate.getFullYear()
+  runMonth.value = focusedDate.getMonth()
+}
 
 const runDates = computed(() => new Set(runStats.value?.dates ?? []))
 
@@ -447,6 +453,7 @@ async function importScoreExcel(e: Event) {
     const r = await upload<{ detail: string; semesters: string[] }>('/api/scores/import', file)
     ElMessage.success(r.detail)
     await loadScores()
+    if (route.query.aiEntity === 'score') { scoreScope.value = 'all'; scoreSemesterFilter.value = '全部' }
     await renderScoreCharts()
   } catch (err) {
     ElMessage.error((err as Error).message)
@@ -746,6 +753,7 @@ function onWindowResize() {
               <div
                 v-else
                 class="cal-cell"
+                :data-ai-date="c.date"
                 :class="{ checked: c.checked, today: c.isToday, future: c.future }"
                 :title="c.future ? '未来日期不能打卡' : '点击打卡 / 编辑里程与步数'"
                 @click="!c.future && openRunDialog(c.date, c.checked)"
@@ -796,7 +804,7 @@ function onWindowResize() {
         </div>
         <el-empty v-if="!cdSorted.length" description="还没有倒计日。加上期末考试、四六级、交作业这类重要日子吧" />
         <div v-else class="cd-grid">
-          <div v-for="c in cdSorted" :key="c.id" class="cd-card" :class="{ past: daysLeft(c.date) < 0 }" @click="openCdDialog(c)">
+          <div v-for="c in cdSorted" :key="c.id" class="cd-card" data-ai-entity="countdown" :data-ai-id="c.id" :class="{ past: daysLeft(c.date) < 0 }" @click="openCdDialog(c)">
             <el-tag size="small" :type="c.category === '考试' ? 'danger' : c.category === '作业' ? 'warning' : 'info'">{{ c.category }}</el-tag>
             <div class="cd-days">
               <template v-if="daysLeft(c.date) > 0">
@@ -870,7 +878,7 @@ function onWindowResize() {
           <span class="form-tip">成绩明细（{{ scoreFiltered.length }} 条）</span>
         </div>
         <el-empty v-if="!scoreFiltered.length" description="还没有成绩。点「导入成绩 Excel」选教务系统导出的表格，也可以手动录入" />
-        <el-table v-else :data="scoreFiltered" size="small">
+        <el-table v-else :data="scoreFiltered" :row-class-name="scoreRowClass" size="small">
           <el-table-column prop="semester" label="学期" min-width="140" />
           <el-table-column prop="courseName" label="课程" min-width="180" />
           <el-table-column prop="credit" label="学分" width="70" />

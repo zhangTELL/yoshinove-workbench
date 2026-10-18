@@ -11,8 +11,13 @@ import { themedIcon } from '../utils/themeIcons'
 import { pomoDisplay, pomoMode, pomoPaused, pomoRunning, pomoTogglePause } from '../stores/pomodoro'
 import { Expand, Fold } from '@element-plus/icons-vue'
 import { useCompactLayout } from '../composables/useCompactLayout'
+import AssistantSidebar from '../components/AssistantSidebar.vue'
+import AssistantReviewBar from '../components/AssistantReviewBar.vue'
+import { assistant } from '../stores/assistant'
+import { useAssistantFocus } from '../composables/useAssistantFocus'
 
 const route = useRoute()
+useAssistantFocus()
 const layoutEl = ref<HTMLElement>()
 const compactLayout = useCompactLayout(layoutEl, 1080)
 const navOverride = ref<boolean | null>(null)
@@ -170,7 +175,7 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div ref="layoutEl" class="layout">
+  <div ref="layoutEl" class="layout" :class="{ 'assistant-open': assistant.open }">
   <el-container class="layout-inner">
     <el-aside :width="navCollapsed ? '64px' : '200px'" class="aside" :class="{ collapsed: navCollapsed }">
       <div class="logo">
@@ -212,6 +217,7 @@ onUnmounted(() => {
           </el-menu-item>
         </template>
       </el-menu>
+      <AssistantSidebar />
       <div v-if="pomoRunning" class="pomo-mini">
         <router-link to="/tools?tab=pomodoro">{{ pomoPaused ? '已暂停' : pomoMode === 'work' ? '专注中' : '休息中' }} · {{ pomoDisplay }}</router-link>
         <el-button size="small" @click="pomoTogglePause">{{ pomoPaused ? '继续' : '暂停' }}</el-button>
@@ -219,7 +225,8 @@ onUnmounted(() => {
     </el-aside>
     <el-container class="content-container">
       <el-main class="main app-main">
-        <router-view />
+        <AssistantReviewBar />
+        <router-view :key="route.path + ':' + String(route.query.aiRevision ?? '')" />
       </el-main>
     </el-container>
   </el-container>
@@ -232,6 +239,7 @@ onUnmounted(() => {
 }
 .layout-inner { height: 100%; }
 .content-container { min-width: 0; }
+@media (min-width: 1200px) { .assistant-open .content-container { margin-right: 430px; } }
 .logo .el-button { margin-left: auto; }
 .collapsed .logo { justify-content: center; padding-inline: 0; }
 .collapsed .logo .el-button { margin: 0; }

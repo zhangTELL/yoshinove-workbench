@@ -815,6 +815,10 @@ async function removePrompt() {
   await del(`/api/ai/prompts/${curPromptId.value}`)
   resetPrompt()
   await loadPrompts()
+  if (route.query.aiEntity === 'prompt') {
+    const focused = promptList.value.find(prompt => prompt.id === Number(route.query.aiId))
+    if (focused) resetPrompt(focused)
+  }
   ElMessage.success('已删除')
 }
 
@@ -1169,7 +1173,7 @@ function onThemeChange() {
           </div>
         </aside>
 
-        <section class="pl-editor">
+        <section class="pl-editor" data-ai-context="true" data-ai-entity="prompt" :data-ai-id="curPromptId">
           <div class="pl-editor-head">
             <el-input v-model="promptForm.name" class="prompt-name-input" placeholder="如：SVG 图标生成器" aria-label="提示词名称" />
           <div class="editor-actions">

@@ -9,7 +9,7 @@ import { settings } from '../db/schema.js'
    ⭐ 写入端必须配套：PUT 时识别出「掩码串」就跳过/还原——否则 PushChannelCard 这类
    "读出来 → 原样存回" 的组件会把掩码当成真值覆盖进库。真实凭据不会以 •••• 开头
    （pushplus 是 32 位 hex、企业微信 secret 是字母数字、cookie 是长 base64），误判概率为零。 */
-const SECRET_KEYS = new Set(['chaoxing.cookie', 'notification.pushplusToken'])
+const SECRET_KEYS = new Set(['chaoxing.cookie', 'notification.pushplusToken', 'assistant.deepseekKey'])
 const SECRET_NESTED: Record<string, readonly string[]> = { 'notification.wecom': ['secret'] }
 const MASK_PREFIX = '••••'
 

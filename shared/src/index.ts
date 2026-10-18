@@ -1,6 +1,8 @@
 /** 共享类型定义：client / server 共用 */
 
 // ===== 通用 =====
+export * from './assistant.js'
+
 export interface ApiResponse<T = unknown> {
   ok: boolean
   data?: T

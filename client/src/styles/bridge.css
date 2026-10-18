@@ -153,3 +153,9 @@ textarea {
    · --el-badge-radius（默认 10px）：徽标是个小胶囊，10px 已经超过它高度的一半，
      接成 small 档反而会把「99+」变成圆角方块。
    · .el-drawer：EP 没给它圆角变量（抽屉是贴边整屏的，本来就不圆）。 */
+.ai-located {
+  outline: 2px solid var(--el-color-primary) !important;
+  outline-offset: 3px;
+  box-shadow: 0 0 0 7px var(--el-color-primary-light-9) !important;
+  scroll-margin: 100px 20px;
+}
