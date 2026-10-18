@@ -239,7 +239,11 @@ onUnmounted(() => {
 }
 .layout-inner { height: 100%; }
 .content-container { min-width: 0; }
-@media (min-width: 1200px) { .assistant-open .content-container { margin-right: 430px; } }
+@media (min-width: 1000px) {
+  .assistant-open .content-container { margin-right: var(--assistant-width, 420px); }
+  .assistant-open .app-main { scrollbar-width: none; }
+  .assistant-open .app-main::-webkit-scrollbar { width: 0; }
+}
 .logo .el-button { margin-left: auto; }
 .collapsed .logo { justify-content: center; padding-inline: 0; }
 .collapsed .logo .el-button { margin: 0; }

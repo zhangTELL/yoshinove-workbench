@@ -4,17 +4,37 @@ import { get, post, put } from '../api/http'
 import { hasUnsavedEdits } from '../composables/useUnsavedChanges'
 
 export const assistant = reactive({
-  open: false, sending: false, resolving: false, loading: false, error: '', draft: '',
+  open: false, sending: false, resolving: false, switching: false, loading: false, error: '', draft: '',
   config: null as AssistantConfig | null,
-  state: { turns: [], pending: null, busy: false } as AssistantState,
+  state: { sessionId: 'main', sessions: [], turns: [], pending: null, busy: false } as AssistantState,
 })
+let loadVersion = 0
 export async function loadAssistant() {
+  const version = ++loadVersion
   const [config, state] = await Promise.all([get<AssistantConfig>('/api/assistant/config'), get<AssistantState>('/api/assistant/state')])
+  if (version !== loadVersion) return
   assistant.config = config
   assistant.state = state
 }
 export async function saveAssistantKey(apiKey: string) {
   assistant.config = await put<AssistantConfig>('/api/assistant/config', { apiKey })
+}
+export async function saveAssistantPreferences(preferences: Pick<AssistantConfig, 'name' | 'petDoubleClick'>) {
+  assistant.config = await put<AssistantConfig>('/api/assistant/config', preferences)
+}
+export async function switchAssistantSession(id?: string) {
+  if (assistant.switching || assistant.sending || assistant.state.busy) return false
+  assistant.switching = true
+  assistant.error = ''
+  ++loadVersion
+  try {
+    const state = id ? await put<AssistantState>('/api/assistant/session', { id }) : await post<AssistantState>('/api/assistant/sessions')
+    ++loadVersion
+    assistant.state = state
+    assistant.draft = ''
+    return true
+  } catch (error) { assistant.error = (error as Error).message; return false }
+  finally { assistant.switching = false }
 }
 export async function sendAssistant(context: { path: string; entity?: unknown; id?: unknown }): Promise<AssistantTurn | null> {
   if (assistant.sending || assistant.state.busy || assistant.state.pending || !assistant.draft.trim()) return null
