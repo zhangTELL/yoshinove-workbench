@@ -28,6 +28,7 @@ import {
   takeChanged,
 } from '../shared/state';
 import { WORK_STATUS_INDEX, type WorkStatusSnapshot } from '../shared/work-status';
+import { selectBubbleSlot } from '../shared/bubble-priority';
 import { makeBalanceBubble, makeWhisperBubble } from './bubble';
 import { clickScore, SCORE_MIN_SPEED, mountScorePopup, spawnScoreBurst } from '../shared/score-popup';
 import { CANVAS_H, FEET_Y, HIT_BOX, DRAG_THRESHOLD, PET_REF_WIDTH, ANIMATION_EXT } from '../shared/constants';
@@ -1537,15 +1538,18 @@ export function makePetUI(rt: {
     // ---- 气泡单槽（同一时刻只渲染一个）----
     // 三种气泡共用同一套定位 CSS（bubble.ts 的 .dsh-pet-bubble：同一个 left/bottom/z-index），
     // 同时渲染只会叠在同一个坐标上互相遮盖——所以这里按优先级挑一个出来渲染，其余不挂载。
-    // 优先级：终态任务 > 碎碎念/对话 > 余额 > 非终态任务。
-    // 为什么终态任务不让位：完成/失败气泡只活 10s，被事件顶掉就彻底看不到了；非终态任务气泡
-    // 常驻（不设自动收起），让位 10s 零损失。与桌面端 sprite.js 的 renderBubble 同一套优先级。
-    const workTerminal = workStatus?.state === 'success' || workStatus?.state === 'error';
+    // 失败提示 > 回复正文 > 完成提示 > 余额 > 进行中状态；两端共用同一个选择器。
+    const bubbleSlot = selectBubbleSlot({
+      workState: workStatus?.state,
+      work: !!(workBubbleOn && workText && cfg.workStatusEnabled),
+      speech: !!(whisperBubbleOn && whisperText),
+      balance: !!(bubbleOn && balance && (cfg.balanceEnabled || balanceManual)),
+    });
     const bubbleNode = (() => {
-      if (workTerminal && workBubbleOn && workText && cfg.workStatusEnabled) {
+      if (bubbleSlot === 'work' && workText) {
         return h(WhisperBubble, { text: workText, on: workBubbleOn });
       }
-      if (whisperBubbleOn && whisperText) {
+      if (bubbleSlot === 'whisper' && whisperText) {
         // assetRoot：配图去哪个表情包目录链取（种类独占 → 用户目录 → 包内），与动画素材同一套归属
         return h(WhisperBubble, {
           text: whisperText,
@@ -1554,11 +1558,8 @@ export function makePetUI(rt: {
           on: whisperBubbleOn,
         });
       }
-      if (bubbleOn && balance && (cfg.balanceEnabled || balanceManual)) {
+      if (bubbleSlot === 'balance' && balance) {
         return h(BalanceBubble, { state: balance, on: bubbleOn });
-      }
-      if (workBubbleOn && workText && cfg.workStatusEnabled) {
-        return h(WhisperBubble, { text: workText, on: workBubbleOn });
       }
       return null;
     })();

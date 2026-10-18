@@ -13,6 +13,7 @@ export * from './displays'; // 多显示器几何（桌面 = 工作区矩形并�
 export * from './motion';
 export * from './balance';
 export * from './whisper';
+export * from './bubble-priority';
 export * from './config';
 export * from './fonts'; // 字体预设（id → CSS 字体栈）+ 字号换算（浏览器与桌面共用同一份）
 export * from './notify';

@@ -10,7 +10,8 @@
     "build": "node tools/setup-pet.mjs && pnpm -r build",
     "pet:prepare": "node tools/setup-pet.mjs",
     "typecheck": "pnpm -r typecheck",
-    "test:comparison-export": "pnpm --filter @wb/server exec tsx --test ../client/tests/comparisonExport.test.ts"
+    "test:comparison-export": "pnpm --filter @wb/server exec tsx --test ../client/tests/comparisonExport.test.ts",
+    "test:pet-bubble": "pnpm --filter @wb/server exec tsx --test ../client/tests/petBubble.test.ts"
   },
   "devDependencies": {
     "concurrently": "^9.1.2",

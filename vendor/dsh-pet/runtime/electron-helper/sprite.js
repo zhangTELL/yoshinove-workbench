@@ -116,7 +116,7 @@ class PetSprite {
     // 配图名称（配置 memes 的键；whisperImageEnabled 开启时由 host 随机抽定，随文本一起来）
     this.whisperImage = '';
     // 工作状态联动（DSH 会话状态）：容器 1s 轮询 /state 递增 workTick → 本宠物按档位播动画+气泡。
-    // 气泡单槽优先级 终态任务 > whisper > balance > 非终态任务（见 renderBubble）；
+    // 气泡单槽优先级由 shared 的 selectBubbleSlot 统一决定（见 renderBubble）；
     // workStatusEnabled 未启用时完全免疫（与浏览器一致）
     this.workOn = false;
     this.workTimer = null;
@@ -1418,19 +1418,18 @@ class PetSprite {
   }
 
   renderBubble() {
-    // 气泡单槽：同一时刻只显示一个（优先级：终态任务 > 碎碎念/对话 > 余额 > 非终态任务）。
-    // 为什么终态任务不让位：完成/失败气泡只活 10s，被事件顶掉就彻底看不到了；非终态任务气泡
-    // 常驻（不设自动收起），让位 10s 零损失。与浏览器 src/client/pet.ts 的单槽优先级同一套。
+    // 气泡单槽：失败提示 > 回复正文 > 完成提示 > 余额 > 进行中状态。
+    // 与浏览器共用选择器，避免“对话完成”遮住实际回复直到两者一起收起。
     // 工作气泡与碎碎念同款弹窗样式：宽度自适应 + 自动换行（is-whisper：正常 white-space、宽随内容）
     // 配图标记交给 CSS：带图时取消 min-width（样式在 shared 的 MEME_BUBBLE_CSS，两端同一份）。
     // 图片 URL 与视频同规则：传 BASE 前缀（桌面是 file:// 页面，必须绝对地址）
     // 素材根同理（配图的归属与动画一致：pet/<素材根>-memes/ 独占 → 用户目录 → 包内）
-    const workOn = !!(this.workOn && this.workText);
-    const whisperOn = !!(this.whisperOn && this.whisperView);
-    const balanceOn = !!(this.bubbleOn && this.balanceView);
-    const workTerminal = this.workState === 'success' || this.workState === 'error';
-    const slot =
-      workTerminal && workOn ? 'work' : whisperOn ? 'whisper' : balanceOn ? 'balance' : workOn ? 'work' : 'none';
+    const slot = S.selectBubbleSlot({
+      workState: this.workState,
+      work: !!(this.workOn && this.workText && this.pet.workStatusEnabled),
+      speech: !!(this.whisperOn && this.whisperView),
+      balance: !!(this.bubbleOn && this.balanceView),
+    });
     const whisperImg = slot === 'whisper' ? S.createMemeImage(this.whisperImage, BASE, this.assetRoot) : null;
     this.bubble.classList.toggle(
       'is-whisper',
