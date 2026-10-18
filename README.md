@@ -77,6 +77,8 @@ pnpm dev
 
 启动后打开 <http://127.0.0.1:5173>。
 
+Windows 也可以双击根目录的 `启动Yoshinove工作台.bat`（需要 PowerShell 7）。启动器会复用已运行的服务、补启动缺失服务，等前后端健康检查通过后再打开页面；请保留启动窗口，启动日志位于 `server/data/launcher/`。
+
 > **第 2 步是干什么的**：`client/public/vditor/` 是约 22MB 的第三方编辑器资源，笔记页与 Markdown 预览通过 `cdn: '/vditor'` 从这里加载，因此已被 `.gitignore` 排除（内容与 `node_modules/vditor/dist` 完全一致，可随时重新拷贝）。跳过它，**笔记页与 Markdown 预览会因加载不到运行时资源而失效**，其余功能不受影响。
 
 只想起其中一端：
