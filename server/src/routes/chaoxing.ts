@@ -3,6 +3,7 @@ import type { FastifyPluginAsync } from 'fastify'
 import { db, sqlite } from '../db/index.js'
 import { chaoxingHomework } from '../db/schema.js'
 import { getStatus, initChaoxing, syncAll, upsertWorks, validateCookie } from '../services/chaoxing.js'
+import { courseIdentityKey, courseIdentityOf } from '../services/chaoxingKey.js'
 
 export const chaoxingRoutes: FastifyPluginAsync = async (app) => {
   initChaoxing(sqlite)
@@ -10,8 +11,9 @@ export const chaoxingRoutes: FastifyPluginAsync = async (app) => {
   app.get('/api/chaoxing/status', async () => {
     const st = getStatus()
     const last = db.select().from(chaoxingHomework).orderBy(desc(chaoxingHomework.syncedAt)).limit(1).get()
-    const total = db.select().from(chaoxingHomework).all().length
-    return { ...st, total, lastSync: last?.syncedAt ?? null }
+    const rows = db.select().from(chaoxingHomework).all()
+    const total = rows.filter(row => row.remotePresent).length
+    return { ...st, total, archived: rows.length - total, lastSync: last?.syncedAt ?? null }
   })
 
   app.post('/api/chaoxing/cookie', async (req) => {
@@ -35,17 +37,31 @@ export const chaoxingRoutes: FastifyPluginAsync = async (app) => {
   app.post('/api/chaoxing/sync', async () => {
     const result = await syncAll()
     let added = 0
-    if (result.ok) added = upsertWorks(result.works)
+    if (result.ok) added = upsertWorks(result.works, result.completedCourses)
     return {
       ok: result.ok,
       detail: result.ok ? `${result.detail}，新增 ${added} 条作业` : result.detail,
-      total: db.select().from(chaoxingHomework).all().length,
+      total: db.select().from(chaoxingHomework).where(eq(chaoxingHomework.remotePresent, true)).all().length,
     }
   })
 
-  app.get('/api/chaoxing/homework', async () => {
-    const rows = db.select().from(chaoxingHomework).orderBy(desc(chaoxingHomework.id)).all()
-    return rows
+  app.get('/api/chaoxing/homework', async req => {
+    const includeArchived = (req.query as { includeArchived?: string }).includeArchived === '1'
+    const rows = db.select().from(chaoxingHomework).orderBy(desc(chaoxingHomework.id)).all().filter(row => includeArchived || row.remotePresent)
+    const classes = new Map<string, Set<string>>()
+    for (const row of rows) {
+      const course = courseIdentityOf(row.url)
+      const key = course ? courseIdentityKey(course) : row.courseName
+      const variants = classes.get(row.courseName) ?? new Set<string>()
+      variants.add(key)
+      classes.set(row.courseName, variants)
+    }
+    return rows.map(row => {
+      const course = courseIdentityOf(row.url)
+      const courseKey = course ? courseIdentityKey(course) : row.courseName
+      const classLabel = course && (classes.get(row.courseName)?.size ?? 0) > 1 ? `${row.courseStart ? row.courseStart + '开课 · ' : ''}班级 ${course.classId}` : ''
+      return { ...row, courseKey, classLabel, courseLabel: classLabel ? `${row.courseName} · ${classLabel}` : row.courseName }
+    })
   })
 
   app.delete('/api/chaoxing/homework/:id', async (req) => {

@@ -70,6 +70,8 @@ export const chaoxingHomework = sqliteTable('chaoxing_homework', {
   courseStart: text('course_start'),
   /** 稳定标识（学习通 workId 优先，退化到 课程+标题）——见 services/chaoxingKey.ts */
   workKey: text('work_key'),
+  /** 最近一次成功读取该课程时，作业是否仍在学习通列表中；移除记录保留为历史 */
+  remotePresent: integer('remote_present', { mode: 'boolean' }).notNull().default(true),
   syncedAt: text('synced_at').notNull(),
   remindedAt: text('reminded_at'),
 })

@@ -25,6 +25,22 @@ export function textKeyOf(courseName: string, title: string): string {
   return `t:${normText(courseName)}|${normText(title)}`
 }
 
+/** 从作业链接提取课程与班级身份，不以显示名称判断是不是同一班。 */
+export function courseIdentityOf(url: string): { courseId: string; classId: string } | null {
+  try {
+    const params = new URL(url.replace(/&amp;/gi, '&'), 'https://mooc1.chaoxing.com').searchParams
+    const entries = [...params].map(([key, value]) => [key.toLowerCase(), value])
+    const courseId = entries.find(([key]) => key === 'courseid')?.[1]
+    const classId = entries.find(([key]) => key === 'classid' || key === 'clazzid')?.[1]
+    if (courseId && classId && /^\d+$/.test(courseId) && /^\d+$/.test(classId)) return { courseId, classId }
+  } catch { /* 没有远程身份的本地记录不会参与归档 */ }
+  return null
+}
+
+export function courseIdentityKey(course: { courseId: string; classId: string }): string {
+  return `${course.courseId}:${course.classId}`
+}
+
 /** 计算作业的稳定标识 */
 export function workKeyOf(w: { url?: string | null; courseName: string; title: string }): string {
   const url = w.url ?? ''

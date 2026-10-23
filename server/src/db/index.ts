@@ -291,6 +291,7 @@ export function ensureSchema() {
   // 学习通作业补 work_key（稳定身份）并清理历史重复行。必须在任何同步之前跑完
   addColumn('chaoxing_homework', 'work_key', 'TEXT')
   migrateChaoxingWorkKeys()
+  addColumn('chaoxing_homework', 'remote_present', 'INTEGER NOT NULL DEFAULT 1')
 
   // P8：项目归属分类（老行为 NULL = 未分类）
   addColumn('projects', 'category_id', 'INTEGER')
@@ -344,7 +345,7 @@ function migrateNotifDedupeIndex(): void {
  *  ① 老库去掉 UNIQUE(course_name, title, deadline) —— 把每次抓取都会变的值当唯一键，是重复行的根源；
  *  ② 回填 work_key（学习通 workId 优先）；
  *  ③ 同 work_key 的重复行合并成一行（保留最新那条的状态/网址，补齐缺失的截止时间与开课时间）；
- *  ④ 建唯一索引，之后任何环境都不可能再写入重复作业。
+ *  ④ 建唯一索引，防止同一稳定标识重复写入；远程移除的旧作业另由同步快照管理。
  * 幂等：重复执行不会产生变化。
  */
 function migrateChaoxingWorkKeys(): void {

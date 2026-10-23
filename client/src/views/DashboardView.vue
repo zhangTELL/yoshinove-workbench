@@ -655,7 +655,7 @@ onMounted(loadAll)
             <a v-for="h in homeworkShown" :key="h.id" class="hw-item" :href="h.url" target="_blank" rel="noreferrer">
               <div class="hw-body">
                 <div class="hw-title">{{ h.title }}</div>
-                <div class="hw-meta">{{ h.courseName }}</div>
+                <div class="hw-meta">{{ h.courseLabel || h.courseName }}</div>
               </div>
               <el-tag v-if="deadlineText(h)" size="small" :type="deadlineText(h)!.level" effect="plain">
                 {{ deadlineText(h)!.text }}

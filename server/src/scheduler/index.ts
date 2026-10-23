@@ -52,7 +52,7 @@ async function scanChaoxing(): Promise<void> {
     lastAutoSyncAttempt = Date.now()
     try {
       const r = await syncAll()
-      if (r.ok) upsertWorks(r.works)
+      if (r.ok) upsertWorks(r.works, r.completedCourses)
       else console.warn('[scheduler] 学习通自动同步失败:', r.detail)
     } catch (e) {
       console.warn('[scheduler] 学习通自动同步异常:', (e as Error).message)
@@ -65,7 +65,7 @@ async function scanChaoxing(): Promise<void> {
   if (!remindBefore.length || !channels.length) return
   const settings = getSettings()
   const now = Date.now()
-  const rows = db.select().from(chaoxingHomework).all()
+  const rows = db.select().from(chaoxingHomework).where(eq(chaoxingHomework.remotePresent, true)).all()
   for (const hw of rows) {
     if (!hw.deadline || hw.status === '已提交') continue
     const dl = new Date(hw.deadline.replace(' ', 'T')).getTime()

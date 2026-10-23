@@ -206,6 +206,11 @@ export interface ChaoxingHomework {
   courseStart: string | null
   syncedAt: string
   remindedAt: string | null
+  /** 同名课程按远程班级区分；兼容旧客户端数据 */
+  courseKey?: string
+  courseLabel?: string
+  classLabel?: string
+  remotePresent?: boolean
 }
 
 /**

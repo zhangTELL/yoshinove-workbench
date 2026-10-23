@@ -1,9 +1,9 @@
 /** 学习通（超星）非官方客户端：仅做读取（课程列表/作业列表），不做任何写入操作 */
 import type { Database } from 'better-sqlite3'
 import { eq } from 'drizzle-orm'
-import { db } from '../db/index.js'
+import { db, sqlite } from '../db/index.js'
 import { chaoxingHomework } from '../db/schema.js'
-import { textKeyOf, workKeyOf } from './chaoxingKey.js'
+import { courseIdentityKey, courseIdentityOf, textKeyOf, workKeyOf } from './chaoxingKey.js'
 
 const UA =
   'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36'
@@ -20,14 +20,23 @@ export function initChaoxing(db: Database): void {
  * 换算出来的、会随抓取变化 —— 同一条作业「上次有截止时间、这次没有」时会插入第二条，
  * 前端就出现两条同名作业、且「打开作业」指向同一个页面。身份必须只取作业的固有属性。
  */
-export function upsertWorks(works: ChaoxingWork[]): number {
+export interface CompletedCourse extends Pick<ChaoxingCourse, 'courseId' | 'classId'> {
+  /** 已确认在列表中的远程身份，包含互评入口，避免把已转入互评的作业误判为移除 */
+  listedWorkKeys?: string[]
+}
+
+export function upsertWorks(works: ChaoxingWork[], completedCourses: CompletedCourse[] = []): number {
+  return sqlite.transaction(() => saveWorks(works, completedCourses))()
+}
+
+function saveWorks(works: ChaoxingWork[], completedCourses: CompletedCourse[]): number {
   const exists = db.select().from(chaoxingHomework).all()
   const byKey = new Map<string, (typeof exists)[number]>()
   const byText = new Map<string, (typeof exists)[number]>()
   for (const h of exists) {
     if (h.workKey) byKey.set(h.workKey, h)
-    // 兜底：迁移尚未跑到（或手工插入）的 work_key 为空的老行，按课程+标题匹配
-    else byText.set(textKeyOf(h.courseName, h.title), h)
+    // 只有缺少远程身份的旧记录可以按文本升级，不能合并编号不同的真实作业。
+    if (!h.workKey || h.workKey.startsWith('t:')) byText.set(textKeyOf(h.courseName, h.title), h)
   }
 
   const now = new Date().toISOString()
@@ -36,22 +45,24 @@ export function upsertWorks(works: ChaoxingWork[]): number {
     const key = workKeyOf(w)
     const old = byKey.get(key) ?? byText.get(textKeyOf(w.courseName, w.title))
     if (old) {
-      const patch: Partial<{ status: string; url: string; deadline: string; courseStart: string; workKey: string }> = {}
+      const patch: Partial<{ courseName: string; title: string; status: string; url: string; deadline: string; courseStart: string; workKey: string }> = {}
+      if (old.courseName !== w.courseName) patch.courseName = w.courseName
+      if (old.title !== w.title) patch.title = w.title
       if (w.status && old.status !== w.status) patch.status = w.status
       if (w.url && old.url !== w.url) patch.url = w.url
       // 截止时间是相对文本换算来的：新值为空时保留上次已知值，别把已知信息抹掉
       if (w.deadline && old.deadline !== w.deadline) patch.deadline = w.deadline
       if (w.courseStart && old.courseStart !== w.courseStart) patch.courseStart = w.courseStart
-      if (!old.workKey) patch.workKey = key
-      if (Object.keys(patch).length) {
-        db.update(chaoxingHomework)
-          .set({ ...patch, syncedAt: now })
-          .where(eq(chaoxingHomework.id, old.id))
-          .run()
-      }
+      if (old.workKey !== key) patch.workKey = key
+      db.update(chaoxingHomework)
+        .set({ ...patch, syncedAt: now, remotePresent: true })
+        .where(eq(chaoxingHomework.id, old.id))
+        .run()
       // 同一批 works 里若有重复项（页面重复渲染），也要命中已存在的行而不是再插一条
-      Object.assign(old, patch)
-      byText.set(textKeyOf(old.courseName, old.title), old)
+      byText.delete(textKeyOf(old.courseName, old.title))
+      Object.assign(old, patch, { remotePresent: true })
+      byKey.set(key, old)
+      if (key.startsWith('t:')) byText.set(textKeyOf(old.courseName, old.title), old)
       continue
     }
     // work_key 唯一索引兜底：即使并发/异常导致重复，也只会更新而不报错
@@ -65,6 +76,7 @@ export function upsertWorks(works: ChaoxingWork[]): number {
         status: w.status,
         courseStart: w.courseStart || null,
         workKey: key,
+        remotePresent: true,
         syncedAt: now,
       })
       .onConflictDoNothing()
@@ -80,9 +92,24 @@ export function upsertWorks(works: ChaoxingWork[]): number {
         status: w.status,
         courseStart: w.courseStart || null,
         workKey: key,
+        remotePresent: true,
         syncedAt: now,
         remindedAt: null,
       })
+    }
+  }
+  // 只处理已成功完整读取的课程；失败、未抓取以及没有远程身份的本地记录原样保留。
+  const seen = new Map(completedCourses.map(course => [courseIdentityKey(course), new Set(course.listedWorkKeys ?? [])]))
+  for (const work of works) {
+    const course = courseIdentityOf(work.url)
+    if (course) seen.get(courseIdentityKey(course))?.add(workKeyOf(work))
+  }
+  for (const homework of db.select().from(chaoxingHomework).all()) {
+    const course = courseIdentityOf(homework.url)
+    const current = course ? seen.get(courseIdentityKey(course)) : undefined
+    if (current && homework.workKey?.startsWith('cx:')) {
+      const present = current.has(homework.workKey)
+      if (homework.remotePresent !== present) db.update(chaoxingHomework).set({ remotePresent: present }).where(eq(chaoxingHomework.id, homework.id)).run()
     }
   }
   return added
@@ -233,6 +260,10 @@ export async function fetchCourseList(cookie: string): Promise<ChaoxingCourse[]>
 const SUBMITTED_STATUS = new Set(['已完成', '待批阅'])
 
 export async function fetchWorkList(cookie: string, course: ChaoxingCourse): Promise<ChaoxingWork[]> {
+  return (await fetchWorkSnapshot(cookie, course)).works
+}
+
+async function fetchWorkSnapshot(cookie: string, course: ChaoxingCourse): Promise<{ works: ChaoxingWork[]; listedWorkKeys: string[] }> {
   const mid = await cxFetch(
     `https://mooc1-api.chaoxing.com/mooc-ans/visit/stucoursemiddle?courseid=${course.courseId}&clazzid=${course.classId}&vc=1&cpi=${course.cpi}&ismooc2=1&v=2`,
     cookie,
@@ -244,6 +275,7 @@ export async function fetchWorkList(cookie: string, course: ChaoxingCourse): Pro
 
   const stuUrl = loc.startsWith('http') ? loc : `https://mooc2-ans.chaoxing.com${loc}`
   const stu = await cxFetch(stuUrl, cookie, { headers: { Referer: 'https://i.chaoxing.com/' } })
+  if (!stu.ok) throw new Error(`课程页请求失败（${stu.status}）`)
   const stuHtml = await stu.text()
   const workEnc = stuHtml.match(/id="workEnc"[^>]*value="([^"]+)"/)?.[1]
   if (!workEnc) throw new Error('课程页未找到 workEnc')
@@ -253,20 +285,40 @@ export async function fetchWorkList(cookie: string, course: ChaoxingCourse): Pro
     cookie,
     { headers: { Referer: stuUrl } },
   )
+  if (!wl.ok) throw new Error(`作业列表请求失败（${wl.status}）`)
   const html = await wl.text()
-  if (html.includes('无权限')) throw new Error('作业列表返回无权限')
+  return parseWorkSnapshot(html, course)
+}
+
+/** 只有完整识别的作业页才能作为当前快照；登录页、错误页和解析异常不能当成空列表。 */
+export function parseWorkList(html: string, course: ChaoxingCourse): ChaoxingWork[] {
+  return parseWorkSnapshot(html, course).works
+}
+
+export function parseWorkSnapshot(html: string, course: ChaoxingCourse): { works: ChaoxingWork[]; listedWorkKeys: string[] } {
+  if (/无权限|passport\d?\.chaoxing\.com\/login|请输入账号|账号登录/.test(html)) throw new Error('作业列表返回无权限或登录页')
+  if (!/<(?:div|main)\b[^>]*class=["'][^"']*\btask-list\b/i.test(html)) throw new Error('未识别到作业页面，本课程暂不更新')
 
   const works: ChaoxingWork[] = []
+  const listedWorkKeys = new Set<string>()
   // 每条作业：<li onclick="goTask(this);" data="…workId=..&enc=.." … aria-label="标题 ; 状态" …>
-  const liRe = /<li onclick="goTask\(this\);"\s+data="([^"]+)"([^>]*)>([\s\S]*?)<\/li>/g
+  const liRe = /<li\b([^>]*)>([\s\S]*?)<\/li>/gi
+  let candidates = 0
   let m: RegExpExecArray | null
   while ((m = liRe.exec(html))) {
-    const [, url, attrs, inner] = m
-    // 只保留真正的作业条目（互评等列表的 li 排除）
-    if (!/\/work\/task\?/.test(url)) continue
+    const [, attrs, inner] = m
+    if (!/\bonclick\s*=\s*["'][^"']*goTask\(this\)/i.test(attrs)) continue
+    const url = (attrs.match(/\bdata\s*=\s*"([^"]+)"/i)?.[1] ?? attrs.match(/\bdata\s*=\s*'([^']+)'/i)?.[1] ?? '').replace(/&amp;/gi, '&')
+    // 互评入口不新增为独立作业，但证明原作业仍在列表中，不能误归档。
+    if (!/\/work\/(?:task|eval-list)\?/.test(url)) throw new Error('作业链接格式变化，本课程暂不更新')
+    candidates++
     const label = attrs.match(/aria-label="([^"]*)"/)?.[1] ?? ''
     const title = label.split(';')[0]?.trim() || ''
-    if (!title) continue
+    const key = workKeyOf({ url, courseName: course.name, title })
+    if (!key.startsWith('cx:')) throw new Error('未能识别作业编号，本课程暂不更新')
+    listedWorkKeys.add(key)
+    if (/\/work\/eval-list\?/.test(url)) continue
+    if (!title) throw new Error('作业标题未能完整解析，本课程暂不更新')
     const status = inner.match(/class="status fl">([^<]+)</)?.[1]?.trim() ?? '进行中'
     // 截止时间是相对文本（剩余X天X小时X分钟），换算为绝对时间
     let deadline: string | null = null
@@ -289,7 +341,10 @@ export async function fetchWorkList(cookie: string, course: ChaoxingCourse): Pro
       courseStart: course.startDate,
     })
   }
-  return works
+  if (!candidates && !(/class=["'][^"']*\bnull-data\b/.test(html) && /暂无作业/.test(html))) {
+    throw new Error('未识别到完整的作业列表，本课程暂不更新')
+  }
+  return { works, listedWorkKeys: [...listedWorkKeys] }
 }
 
 export interface SyncResult {
@@ -297,31 +352,41 @@ export interface SyncResult {
   detail: string
   works: ChaoxingWork[]
   courseCount: number
+  completedCourses: CompletedCourse[]
 }
 
 /** 全量同步：课程 → 每门课的作业，汇总返回 */
-export async function syncAll(): Promise<SyncResult> {
+let syncing: Promise<SyncResult> | null = null
+export function syncAll(): Promise<SyncResult> {
+  if (!syncing) syncing = collectAll().finally(() => { syncing = null })
+  return syncing
+}
+async function collectAll(): Promise<SyncResult> {
   const cookie = getCookie()
-  if (!cookie) return { ok: false, detail: '未配置 Cookie', works: [], courseCount: 0 }
+  if (!cookie) return { ok: false, detail: '未配置 Cookie', works: [], courseCount: 0, completedCourses: [] }
   const check = await validateCookie(cookie)
-  if (!check.ok) return { ok: false, detail: check.detail, works: [], courseCount: 0 }
+  if (!check.ok) return { ok: false, detail: check.detail, works: [], courseCount: 0, completedCourses: [] }
   const courses = await fetchCourseList(cookie)
   if (!courses.length) {
-    return { ok: false, detail: '未解析到任何课程（页面结构可能变化，需按实际返回调整解析）', works: [], courseCount: 0 }
+    return { ok: false, detail: '未解析到任何课程（页面结构可能变化，需按实际返回调整解析）', works: [], courseCount: 0, completedCourses: [] }
   }
   const works: ChaoxingWork[] = []
   const failed: string[] = []
+  const completedCourses: SyncResult['completedCourses'] = []
   for (const c of courses) {
     try {
-      works.push(...(await fetchWorkList(cookie, c)))
+      const snapshot = await fetchWorkSnapshot(cookie, c)
+      works.push(...snapshot.works)
+      completedCourses.push({ courseId: c.courseId, classId: c.classId, listedWorkKeys: snapshot.listedWorkKeys })
     } catch (e) {
       failed.push(`${c.name}: ${(e as Error).message}`)
     }
   }
   return {
-    ok: true,
+    ok: completedCourses.length > 0,
     detail: failed.length ? `同步了 ${courses.length} 门课，部分失败: ${failed.join('；')}` : `同步成功（${courses.length} 门课，${works.length} 条作业）`,
     works,
     courseCount: courses.length,
+    completedCourses,
   }
 }

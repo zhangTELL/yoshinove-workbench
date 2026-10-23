@@ -18,6 +18,10 @@ interface Homework {
   courseStart: string | null
   syncedAt: string
   remindedAt: string | null
+  remotePresent: boolean
+  courseKey: string
+  courseLabel: string
+  classLabel: string
 }
 
 interface ChaoxingStatus {
@@ -25,12 +29,14 @@ interface ChaoxingStatus {
   uid: string | null
   total: number
   lastSync: string | null
+  archived: number
 }
 
 // ===== 状态 =====
 const loading = ref(true)
 const status = ref<ChaoxingStatus | null>(null)
 const homework = ref<Homework[]>([])
+const includeArchived = ref(route.query.aiEntity === 'homework')
 const cookieInput = ref('')
 const savingCookie = ref(false)
 const syncing = ref(false)
@@ -75,32 +81,33 @@ const AUTO_SYNC_OPTIONS = [
  * 退课 / 已结束的课程没有开课时间，一律归入「其他学期」。
  */
 const courseGroups = computed(() => {
-  const termOfCourse = new Map<string, Set<string>>()
+  const termOfCourse = new Map<string, { label: string; terms: Set<string> }>()
   for (const h of homework.value) {
-    const set = termOfCourse.get(h.courseName) ?? new Set<string>()
+    const group = termOfCourse.get(h.courseKey) ?? { label: h.courseLabel, terms: new Set<string>() }
     const t = termOf(h.courseStart)
-    if (t) set.add(t)
-    termOfCourse.set(h.courseName, set)
+    if (t) group.terms.add(t)
+    termOfCourse.set(h.courseKey, group)
   }
-  const cur: string[] = []
-  const other: string[] = []
-  for (const [name, terms] of termOfCourse) {
-    if (currentTerm.value && terms.has(currentTerm.value)) cur.push(name)
-    else other.push(name)
+  const cur: { key: string; label: string }[] = []
+  const other: { key: string; label: string }[] = []
+  for (const [key, { label, terms }] of termOfCourse) {
+    if (currentTerm.value && terms.has(currentTerm.value)) cur.push({ key, label })
+    else other.push({ key, label })
   }
   // 中文按拼音排序，下拉里找课更快
-  const byName = new Intl.Collator('zh-Hans-CN').compare
+  const compare = new Intl.Collator('zh-Hans-CN').compare
+  const byName = (a: { label: string }, b: { label: string }) => compare(a.label, b.label)
   const groups = [
     { label: `本学期${currentTerm.value ? `（${currentTerm.value}）` : ''}`, items: cur.sort(byName) },
     { label: '其他学期 / 已结束', items: other.sort(byName) },
   ]
   // 没有学期信息时不分错组，退回平铺
-  if (!currentTerm.value) return [{ label: '课程', items: [...termOfCourse.keys()].sort(byName) }]
+  if (!currentTerm.value) return [{ label: '课程', items: [...termOfCourse].map(([key, value]) => ({ key, label: value.label })).sort(byName) }]
   return groups.filter((g) => g.items.length)
 })
 const filtered = computed(() =>
   homework.value.filter((h) => {
-    if (filterCourse.value !== '全部' && h.courseName !== filterCourse.value) return false
+    if (filterCourse.value !== '全部' && h.courseKey !== filterCourse.value) return false
     if (filterStatus.value !== '全部' && h.status !== filterStatus.value) return false
     if (semesterFilter.value === 'current' && currentCourseNames.value.size) {
       const nameMatch = currentCourseNames.value.has(h.courseName)
@@ -158,7 +165,8 @@ async function loadAll(refreshSettings = false) {
   loading.value = true
   try {
     status.value = await get<ChaoxingStatus>('/api/chaoxing/status')
-    homework.value = await get<Homework[]>('/api/chaoxing/homework')
+    homework.value = await get<Homework[]>('/api/chaoxing/homework' + (includeArchived.value ? '?includeArchived=1' : ''))
+    if (filterCourse.value !== '全部' && !homework.value.some(h => h.courseKey === filterCourse.value)) filterCourse.value = '全部'
     if (refreshSettings) {
       const settings = await get<Record<string, any>>('/api/settings')
       remindBefore.value = settings['chaoxing.remindBefore'] ?? [1440, 360]
@@ -306,12 +314,13 @@ async function removeHomework(h: Homework) {
                 <el-radio-button value="current">本学期</el-radio-button>
                 <el-radio-button value="all">全部学期</el-radio-button>
               </el-radio-group>
+              <el-checkbox v-model="includeArchived" @change="loadAll()">显示历史移除记录<template v-if="status?.archived">（{{ status.archived }}）</template></el-checkbox>
             </div>
             <el-select v-model="filterCourse" size="small" class="course-filter">
               <!-- 「全部」独立在分组之外，分组按开课时间推断的学期划分 -->
               <el-option label="全部课程" value="全部" />
               <el-option-group v-for="g in courseGroups" :key="g.label" :label="g.label">
-                <el-option v-for="c in g.items" :key="c" :value="c" :label="c" />
+                <el-option v-for="c in g.items" :key="c.key" :value="c.key" :label="c.label" />
               </el-option-group>
             </el-select>
           </div>
@@ -321,15 +330,17 @@ async function removeHomework(h: Homework) {
           :description="filterStatus === '进行中' ? '没有未提交的作业，太棒了 🎉' : '当前筛选条件下没有作业'"
         />
         <div v-else class="hw-list">
-          <div v-for="h in filtered" :key="h.id" class="hw-item" data-ai-entity="homework" :data-ai-id="h.id">
+          <div v-for="h in filtered" :key="h.id" class="hw-item" :class="{ 'is-archived': !h.remotePresent }" data-ai-entity="homework" :data-ai-id="h.id">
             <div class="hw-main">
               <div class="hw-title">
                 <el-tag size="small" type="info">{{ h.courseName }}</el-tag>
+                <el-tag v-if="h.classLabel" size="small" type="info" effect="plain">{{ h.classLabel }}</el-tag>
                 <span>{{ h.title }}</span>
                 <el-tag v-if="h.status === '已提交'" size="small" type="success">已提交</el-tag>
+                <el-tag v-if="!h.remotePresent" size="small" type="info">已不在学习通列表</el-tag>
               </div>
               <div class="hw-deadline">
-                <el-tag :type="deadlineInfo(h).type" size="small" effect="plain">{{ deadlineInfo(h).text }}</el-tag>
+                <el-tag :type="h.remotePresent ? deadlineInfo(h).type : 'info'" size="small" effect="plain">{{ deadlineInfo(h).text }}</el-tag>
               </div>
             </div>
             <div class="hw-actions">
@@ -465,6 +476,7 @@ async function removeHomework(h: Homework) {
   gap: 8px;
   flex-wrap: wrap;
 }
+.hw-item.is-archived { background: var(--el-fill-color-lighter); color: var(--el-text-color-secondary); }
 .hw-deadline {
   margin-top: 4px;
 }
