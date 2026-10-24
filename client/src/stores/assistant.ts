@@ -24,6 +24,7 @@ export async function saveAssistantPreferences(preferences: Pick<AssistantConfig
 }
 export async function switchAssistantSession(id?: string) {
   if (assistant.switching || assistant.sending || assistant.state.busy) return false
+  if (assistant.state.pending) { assistant.error = '请先撤销或确定当前修改，再新建或切换会话。'; return false }
   assistant.switching = true
   assistant.error = ''
   ++loadVersion

@@ -224,6 +224,14 @@ onUnmounted(() => {
       </div>
     </el-aside>
     <el-container class="content-container">
+      <el-header height="44px" class="workspace-toolbar">
+        <span>{{ route.meta.title || '工作台' }}</span>
+        <el-tooltip :content="assistant.open ? '收起 AI 侧栏' : '展开 AI 侧栏'" placement="bottom-end">
+          <el-button text :class="{ 'is-active': assistant.open }" :aria-label="assistant.open ? '收起 AI 侧栏' : '展开 AI 侧栏'" :aria-expanded="assistant.open" @click="assistant.open = !assistant.open">
+            <el-icon :size="20"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2" stroke="currentColor" stroke-width="1.7" /><path d="M15 4v16" stroke="currentColor" stroke-width="1.7" /><path v-if="assistant.open" d="M17 8h2v8h-2z" fill="currentColor" /></svg></el-icon>
+          </el-button>
+        </el-tooltip>
+      </el-header>
       <el-main class="main app-main">
         <AssistantReviewBar />
         <router-view :key="route.path + ':' + String(route.query.aiRevision ?? '')" />
@@ -239,8 +247,10 @@ onUnmounted(() => {
 }
 .layout-inner { height: 100%; }
 .content-container { min-width: 0; }
+.workspace-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-shrink: 0; border-bottom: 1px solid var(--el-border-color-lighter); color: var(--el-text-color-secondary); font-size: 12px; }
+.workspace-toolbar .is-active { color: var(--el-color-primary); background: var(--el-color-primary-light-9); }
 @media (min-width: 1000px) {
-  .assistant-open .content-container { margin-right: var(--assistant-width, 420px); }
+  .assistant-open .content-container { margin-right: var(--assistant-inset, 420px); }
   .assistant-open .app-main { scrollbar-width: none; }
   .assistant-open .app-main::-webkit-scrollbar { width: 0; }
 }

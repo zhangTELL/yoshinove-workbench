@@ -184,6 +184,11 @@ export function makePetUI(rt: {
     // 随 size / cfg.font 变化即时重算——followPet 关闭时结果与 size 无关（见 resolveFontPx）。
     const fontPx = resolveFontPx(cfg.font, size);
     const halfW = size / 2;
+    // 网页宿主可划出独立的活动区域，侧栏展开后移动与拖拽都使用这块区域。
+    const viewport = () => {
+      const host = rootRef.current?.closest<HTMLElement>('.pet-overlay-host');
+      return { width: host?.clientWidth || window.innerWidth, height: host?.clientHeight || window.innerHeight };
+    };
     const halfH = (size * 9) / 16 / 2;
     // 舞台脚底垫高（宠物站立于脚底线）：命中框 y、碰撞 body 框、渲染 stage 位移共用
     const bottomPad = (size * (9 / 16) * (CANVAS_H - FEET_Y)) / CANVAS_H;
@@ -656,9 +661,21 @@ export function makePetUI(rt: {
       setAnim(name);
     };
     useEffect(() => {
-      const onResize = () => setCustomPos((prev) => (prev ? { ...prev } : prev));
+      const onResize = () => {
+        stopMove(); stopThrow();
+        boxPxRef.current = null;
+        setCustomPos((prev) => {
+          if (prev) return { ...prev };
+          const root = rootRef.current;
+          for (const key of ['left', 'top', 'right', 'bottom']) root?.style.removeProperty(key);
+          return prev;
+        });
+      };
+      const observer = new ResizeObserver(onResize);
+      const host = rootRef.current?.closest('.pet-overlay-host');
+      if (host) observer.observe(host);
       window.addEventListener('resize', onResize);
-      return () => window.removeEventListener('resize', onResize);
+      return () => { observer.disconnect(); window.removeEventListener('resize', onResize); };
     }, []);
 
     // ---- 动画链：播完按权重选下一个 ----
@@ -836,17 +853,17 @@ export function makePetUI(rt: {
 
     const currentCenterX = () => {
       const cp = customPosRef.current;
-      if (cp) return cp.rx * window.innerWidth;
+      if (cp) return cp.rx * viewport().width;
       const rootEl = rootRef.current;
       if (rootEl) return rootEl.getBoundingClientRect().left + halfW;
-      return window.innerWidth - 24 - halfW;
+      return viewport().width - 24 - halfW;
     };
     const currentCenterY = () => {
       const cp = customPosRef.current;
-      if (cp) return cp.ry * window.innerHeight;
+      if (cp) return cp.ry * viewport().height;
       const rootEl = rootRef.current;
       if (rootEl) return rootEl.getBoundingClientRect().top + halfH;
-      return window.innerHeight - 20 - halfH;
+      return viewport().height - 20 - halfH;
     };
 
     const startMoveDrive = (el: HTMLVideoElement) => {
@@ -862,8 +879,7 @@ export function makePetUI(rt: {
         const t = el.currentTime || 0;
         const rootEl = rootRef.current;
         if (rootEl) {
-          const W = window.innerWidth;
-          const H = window.innerHeight;
+          const { width: W, height: H } = viewport();
           let ratioX;
           if (t <= leadSec) ratioX = startRatio;
           else if (t >= duration - tailSec) ratioX = targetRatio;
@@ -897,7 +913,7 @@ export function makePetUI(rt: {
       if (!chosen) return false;
       const mp = Object.assign({}, moves.default, chosen.params || {});
       const dir = (facingRef.current === 'right') !== petAnims.turn.includes(animRef.current) ? 1 : -1;
-      const W = window.innerWidth;
+      const W = viewport().width;
       // 移动距离随宠物缩放：config 的 minDist/maxDist 是基准尺寸（462px 宽）下的 px，
       // 按 实际size/基准 等比缩放 —— 小宠物挪小步、大宠物挪大步，与人物自身大小匹配
       const distScale = size / PET_REF_WIDTH;
@@ -905,7 +921,7 @@ export function makePetUI(rt: {
         cx: currentCenterX(),
         cy: currentCenterY(),
         W,
-        H: window.innerHeight,
+        H: viewport().height,
         dir,
         minDist: mp.minDist * distScale,
         maxDist: mp.maxDist * distScale,
@@ -990,7 +1006,7 @@ export function makePetUI(rt: {
     const startThrow = (px: number, py: number, vx: number, vy: number) => {
       stopDragFollow();
       stopMove();
-      const bounds = throwBounds({ W: window.innerWidth, H: window.innerHeight, size, sideAllow });
+      const bounds = throwBounds({ W: viewport().width, H: viewport().height, size, sideAllow });
       const token = ++throwTokenRef.current;
       let state: ThrowState = { x: px, y: py, vx, vy };
       let last = performance.now();
@@ -1043,8 +1059,8 @@ export function makePetUI(rt: {
         }
         boxPxRef.current = { x: res.x, y: res.y };
         customPosRef.current = {
-          rx: (res.x + halfW) / window.innerWidth,
-          ry: (res.y + halfH) / window.innerHeight,
+          rx: (res.x + halfW) / viewport().width,
+          ry: (res.y + halfH) / viewport().height,
         };
         // 落地 Q 弹：只在空中→地面转换帧触发一次，力度随冲击速度（轻落 0.8 ~ 重砸 0.55）
         const grounded = res.y >= bounds.maxY - 1;
@@ -1153,11 +1169,11 @@ export function makePetUI(rt: {
     const placeTip = (clientX: number, clientY: number): void => {
       const tipEl = tipRef.current;
       if (!tipEl) return;
-      const viewport = document.documentElement;
+      const bounds = viewport();
       const p = tooltipPlacement(
         { x: clientX, y: clientY },
         { w: tipEl.offsetWidth, h: tipEl.offsetHeight },
-        { x: 0, y: 0, w: viewport.clientWidth, h: viewport.clientHeight },
+        { x: 0, y: 0, w: bounds.width, h: bounds.height },
         size * TOOLTIP_GAP_RATIO,
       );
       tipEl.style.left = p.x + 'px';
@@ -1339,7 +1355,7 @@ export function makePetUI(rt: {
           startThrow(px, py, vel.vx, vel.vy);
         } else {
           // 原地放下：提交 customPos → React 按 rootStyle（含边界夹取）重排位置
-          setCustomPos({ rx: (px + halfW) / window.innerWidth, ry: (py + halfH) / window.innerHeight });
+          setCustomPos({ rx: (px + halfW) / viewport().width, ry: (py + halfH) / viewport().height });
         }
       }
       // 提示复位：点击/拖拽期间收起的悬浮提示，指针仍在命中区内就恢复——指针捕获期间
@@ -1528,8 +1544,8 @@ export function makePetUI(rt: {
           // 拖拽位置即松手位置：不做边界夹取——宠物可被拖到屏幕任意位置（含贴边/出界），
           // 松手不会被拉回；漫游/抛掷路径自身目标已界内，不受影响。
           return {
-            left: rx * window.innerWidth - halfW + 'px',
-            top: ry * window.innerHeight - halfH + 'px',
+            left: Math.max(-sideAllow, Math.min(rx * viewport().width - halfW, viewport().width - size + sideAllow)) + 'px',
+            top: ry * viewport().height - halfH + 'px',
             right: 'auto',
             bottom: 'auto',
           };

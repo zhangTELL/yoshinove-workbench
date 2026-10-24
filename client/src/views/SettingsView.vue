@@ -3,7 +3,8 @@ import { computed } from 'vue'
 import { ElMessage } from 'element-plus'
 import { appearance, applyThemePreset, resetAppearance, themeLocksMode } from '../stores/appearance'
 import { THEME_PRESETS, themePreset } from '../utils/themePresets'
-import PetRuntime from '../components/PetRuntime.vue'
+import PetSettings from '../components/PetSettings.vue'
+import AssistantWidthSetting from '../components/AssistantWidthSetting.vue'
 
 /**
  * 设置：工作台级个性化配置，**全部实时生效**（主题预置/外观/圆角/字号/语言），
@@ -18,7 +19,7 @@ import PetRuntime from '../components/PetRuntime.vue'
  *   - 学习通 Cookie            → 学习通作业
  *   - 余额阈值与刷新间隔        → AI 实验区 → 账户余额
  *
- * 本页不发任何后端请求。
+ * 外观保存在本机，桌宠配置由独立设置组件通过后端保存。
  */
 
 const ACCENT_PRESETS = ['#409eff', '#007aff', '#7c5cff', '#e873a4', '#22a06b', '#e6a23c', '#f56c6c', '#14b8a6', '#6b7280']
@@ -213,7 +214,8 @@ function reset() {
         </div>
       </div>
     </el-card>
-    <div class="pet-config-area"><PetRuntime settings /></div>
+    <el-card><template #header>AI 侧栏</template><AssistantWidthSetting /></el-card>
+    <div class="pet-config-area"><PetSettings /></div>
   </div>
 </template>
 

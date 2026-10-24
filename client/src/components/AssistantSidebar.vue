@@ -1,11 +1,12 @@
 <script setup lang="ts">
-import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, toRef, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ChatDotRound, Close, Setting, Position, RefreshLeft, Check, Plus } from '@element-plus/icons-vue'
 import type { AssistantTarget, AssistantTurn } from '@wb/shared'
 import { assistant, loadAssistant, resolveAssistant, switchAssistantSession, sendAssistant, targetLocation } from '../stores/assistant'
 import { hasUnsavedEdits } from '../composables/useUnsavedChanges'
 import AssistantSettings from './AssistantSettings.vue'
+import { assistantLayout } from '../stores/assistantLayout'
 
 const route = useRoute()
 const router = useRouter()
@@ -14,7 +15,7 @@ const messagesEl = ref<HTMLElement>()
 const localMessage = ref('')
 const following = ref(true)
 const resizing = ref(false)
-const width = ref(420)
+const width = toRef(assistantLayout, 'width')
 const viewportWidth = ref(window.innerWidth)
 const name = computed(() => assistant.config?.name || 'AI助手')
 const canSend = computed(() => !!assistant.config?.configured && !assistant.sending && !assistant.state.busy && !assistant.state.pending && !!assistant.draft.trim())
@@ -24,11 +25,14 @@ let initialized = false
 let seenRevision = ''
 let seenSession = ''
 let drag: { x: number; width: number; userSelect: string; cursor: string } | null = null
-let preferredWidth = 420
+let preferredWidth = assistantLayout.defaultWidth
 function limitWidth(value: number) { return Math.round(Math.max(320, Math.min(value, Math.max(320, window.innerWidth - 560)))) }
-function applyWidth() { document.documentElement.style.setProperty('--assistant-width', width.value + 'px') }
+function applyWidth() {
+  document.documentElement.style.setProperty('--assistant-width', width.value + 'px')
+  document.documentElement.style.setProperty('--assistant-inset', assistant.open && window.innerWidth >= 1000 ? width.value + 'px' : '0px')
+}
 function onResize() { viewportWidth.value = window.innerWidth; if (window.innerWidth >= 1000) width.value = limitWidth(preferredWidth); applyWidth() }
-function rememberWidth() { preferredWidth = width.value; try { localStorage.setItem('wb.assistant.width', String(width.value)) } catch { /* 无法持久化时仍可调整 */ } }
+function rememberWidth() { preferredWidth = width.value }
 function beginResize(event: PointerEvent) {
   if (event.button !== 0) return
   event.preventDefault()
@@ -54,7 +58,7 @@ function endResize() {
 function resizeWithKeyboard(event: KeyboardEvent) {
   if (!['ArrowLeft', 'ArrowRight', 'Home'].includes(event.key)) return
   event.preventDefault()
-  width.value = limitWidth(event.key === 'Home' ? 420 : width.value + (event.key === 'ArrowLeft' ? 24 : -24))
+  width.value = limitWidth(event.key === 'Home' ? assistantLayout.defaultWidth : width.value + (event.key === 'ArrowLeft' ? 24 : -24))
   applyWidth(); rememberWidth()
 }
 function onScroll() {
@@ -76,6 +80,11 @@ async function changeSession(id?: string) {
     seenRevision = latest ? `${latest.id}-${latest.status}` : ''
     await toLatest()
   }
+}
+async function launchNewSession() {
+  assistant.open = true
+  configVisible.value = false
+  await changeSession()
 }
 async function locate(target: AssistantTarget, turn: AssistantTurn) {
   if (hasUnsavedEdits()) { assistant.error = 'AI 修改已就绪，请先保存当前草稿，再点击修改条目定位。'; return }
@@ -124,12 +133,15 @@ function onShortcut(event: KeyboardEvent) {
   if ((event.ctrlKey || event.metaKey) && event.shiftKey && event.key.toLowerCase() === 'k') { event.preventDefault(); assistant.open = !assistant.open }
   if (event.key === 'Escape' && assistant.open) assistant.open = false
 }
-watch(() => assistant.open, open => { if (open) { void refresh(); void toLatest() } else endResize() })
+watch(() => assistant.open, open => {
+  if (open) { preferredWidth = assistantLayout.defaultWidth; onResize(); void refresh(); void toLatest() }
+  else { endResize(); applyWidth() }
+})
+watch(() => assistantLayout.defaultWidth, value => { preferredWidth = value; onResize() })
 // 分别监听标量；轮询仅替换对象时不触发滚动。阅读历史期间新消息也不抢位置。
 watch([() => assistant.state.turns.at(-1)?.id, () => assistant.state.turns.at(-1)?.status, () => assistant.sending], () => { if (following.value) void toLatest() })
 watch(() => assistant.state.sessionId, () => { localMessage.value = ''; void toLatest() })
 onMounted(() => {
-  try { const saved = Number(localStorage.getItem('wb.assistant.width')); if (Number.isFinite(saved) && saved >= 320) preferredWidth = saved } catch { /* 使用默认宽度 */ }
   onResize(); void refresh(); poll = setInterval(() => { void refresh() }, 4000)
   window.addEventListener('keydown', onShortcut); window.addEventListener('resize', onResize)
   if (route.query.assistant === 'open') assistant.open = true
@@ -138,8 +150,8 @@ onBeforeUnmount(() => { endResize(); if (poll) clearInterval(poll); window.remov
 </script>
 
 <template>
-  <button class="assistant-launch" :class="{ active: assistant.open }" aria-label="打开 AI 助手" :title="name + ' · Ctrl+Shift+K'" @click="assistant.open = !assistant.open">
-    <el-icon :size="21"><ChatDotRound /></el-icon><span>{{ name }}</span><i v-if="assistant.state.pending" class="assistant-pending-dot" />
+  <button class="assistant-launch" aria-label="新建 AI 对话" :title="name + ' · 新建对话'" :disabled="assistant.sending || assistant.state.busy || assistant.switching" @click="launchNewSession">
+    <el-icon :size="21"><ChatDotRound /></el-icon><span>新建对话</span><i v-if="assistant.state.pending" class="assistant-pending-dot" />
   </button>
   <Teleport to="body">
   <div v-if="assistant.open" class="assistant-divider" :class="{ resizing }" role="separator" aria-label="调整 AI 侧栏宽度" aria-orientation="vertical" :aria-valuenow="width" :aria-valuemin="320" :aria-valuemax="Math.max(320, viewportWidth - 560)" tabindex="0" @pointerdown="beginResize" @pointermove="moveResize" @pointerup="endResize" @pointercancel="endResize" @lostpointercapture="endResize" @keydown="resizeWithKeyboard" />
@@ -190,7 +202,7 @@ onBeforeUnmount(() => { endResize(); if (poll) clearInterval(poll); window.remov
 
 <style scoped>
 .assistant-launch { display: flex; align-items: center; justify-content: center; gap: 8px; margin: 12px; padding: 11px 8px; color: var(--el-color-primary); border: 1px solid var(--el-border-color); border-radius: var(--el-border-radius-base); background: var(--el-fill-color-light); cursor: pointer; font: inherit; position: relative; }
-.assistant-launch.active { background: var(--el-color-primary-light-9); border-color: var(--el-color-primary); }
+.assistant-launch:disabled { opacity: .55; cursor: wait; }
 .assistant-pending-dot { width: 7px; height: 7px; background: var(--el-color-warning); border-radius: 50%; }
 .assistant-panel { position: fixed; inset: 0 0 0 auto; width: var(--assistant-width, 420px); z-index: 1800; background: var(--el-bg-color); color: var(--el-text-color-primary); display: flex; flex-direction: column; overflow: hidden; }
 .assistant-divider { position: fixed; top: 0; bottom: 0; right: calc(var(--assistant-width, 420px) - 5px); width: 10px; z-index: 1801; cursor: col-resize; touch-action: none; }

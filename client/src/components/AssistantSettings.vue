@@ -4,6 +4,7 @@ import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { assistant, saveAssistantKey, saveAssistantPreferences } from '../stores/assistant'
 import { get, put } from '../api/http'
+import AssistantWidthSetting from './AssistantWidthSetting.vue'
 
 interface PetPreference {
   id: string
@@ -58,6 +59,7 @@ onMounted(() => { void loadPets() })
 <template>
   <section class="assistant-settings" aria-label="AI 助手设置">
     <h3>助手设置</h3>
+    <div class="settings-group"><AssistantWidthSetting /></div>
     <div class="settings-group">
       <label for="assistant-name">助手名称</label>
       <el-input id="assistant-name" v-model="name" maxlength="30" placeholder="AI助手" />
