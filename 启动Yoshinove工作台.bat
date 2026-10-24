@@ -1,10 +1,10 @@
 @echo off
 setlocal
 chcp 65001 >nul 2>&1
-title Yoshinove 工作台 - 开发服务
+title Yoshinove Workbench - Dev Server
 where pwsh >nul 2>&1
 if errorlevel 1 (
-    echo [X] 未检测到 PowerShell 7，请安装后重试。
+    echo [X] PowerShell 7 not found. Install PowerShell 7 and retry.
     pause
     exit /b 1
 )
