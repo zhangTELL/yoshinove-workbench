@@ -4,6 +4,8 @@
 
 当前形态是**本地 Web 应用**（前后端在本机跑）
 
+Windows 用户可从 [Releases](https://github.com/zhangTELL/yoshinove-workbench/releases/latest) 下载免安装 ZIP，解压后双击「启动工作台.bat」，无需安装 Node、pnpm 或 PowerShell 7。
+
 ## AI 助手与桌宠
 
 - 左侧导航底部打开 **AI 助手**，填写自己的 DeepSeek API Key，模型固定为 **DeepSeek V4.1 Flash**。顶部「+」新建会话，下拉列表可切回历史；助手名称默认「AI助手」，可在侧栏设置中修改。

@@ -1,13 +1,14 @@
 {
   "name": "yoshinove-workbench",
   "private": true,
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "学生工作台：课表/提醒/学习通/健康跑/笔记/AI实验区",
   "scripts": {
     "dev": "node tools/setup-pet.mjs && concurrently -n server,client -c blue,green \"pnpm --filter @wb/server dev\" \"pnpm --filter @wb/client dev\"",
     "dev:server": "node tools/setup-pet.mjs && pnpm --filter @wb/server dev",
     "dev:client": "node tools/setup-pet.mjs && pnpm --filter @wb/client dev",
     "build": "node tools/setup-pet.mjs && pnpm -r build",
+    "build:portable": "pnpm build && node tools/release/build-portable.cjs",
     "pet:prepare": "node tools/setup-pet.mjs",
     "typecheck": "pnpm -r typecheck",
     "test": "pnpm --filter @wb/server test && pnpm test:pet-bubble && pnpm test:comparison-export",
