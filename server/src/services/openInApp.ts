@@ -135,10 +135,10 @@ const CATALOG: CatalogEntry[] = [
  * 启动前清理继承来的凭据变量（对齐 DSH 的 scrubbedParentEnv）：
  * 本应用自己带着一堆 API Key，不应该把它们传给被打开的应用。
  */
-function scrubbedEnv(): NodeJS.ProcessEnv {
+export function scrubbedEnv(): NodeJS.ProcessEnv {
   const out: NodeJS.ProcessEnv = {}
   for (const [k, v] of Object.entries(process.env)) {
-    if (/key|secret|token|password|passwd|credential/i.test(k)) continue
+    if (/key|secret|token|password|passwd|credential|cookie|session/i.test(k) || k === 'ELECTRON_RUN_AS_NODE') continue
     out[k] = v
   }
   return out
@@ -564,7 +564,7 @@ export async function appIcon(appId: string): Promise<Buffer | null> {
       const out = path.join(dir, 'icon.png')
       writeFileSync(script, EXTRACT_ICON_PS1, 'utf8')
       execFile(
-        'powershell.exe',
+        'pwsh',
         ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', script, source, out],
         { timeout: 10000, windowsHide: true },
         (err) => {

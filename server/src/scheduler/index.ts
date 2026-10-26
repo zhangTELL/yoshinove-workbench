@@ -6,6 +6,7 @@ import { chaoxingHomework, courses, courseSessions, scheduleSwaps, semesters } f
 import { findLowBalances, pruneSnapshots, refreshProfiles, selectProfiles } from '../services/balanceStore.js'
 import { syncAll, upsertWorks } from '../services/chaoxing.js'
 import { sendPushPlus, sendWecom } from '../services/push.js'
+import { decodeSettingValue, readSetting } from '../security/credentials.js'
 
 interface NotifSettings {
   rules: ReminderRule[]
@@ -22,9 +23,9 @@ function getSettings(): NotifSettings {
   }
   for (const r of rows) {
     try {
-      if (r.key === 'notification.rules') out.rules = JSON.parse(r.value)
-      else if (r.key === 'notification.pushplusToken') out.pushplusToken = JSON.parse(r.value) ?? ''
-      else if (r.key === 'notification.wecom') Object.assign(out.wecom, JSON.parse(r.value) ?? {})
+      if (r.key === 'notification.rules') out.rules = decodeSettingValue(r.key, r.value) as NotifSettings['rules']
+      else if (r.key === 'notification.pushplusToken') out.pushplusToken = decodeSettingValue(r.key, r.value) as string ?? ''
+      else if (r.key === 'notification.wecom') Object.assign(out.wecom, decodeSettingValue(r.key, r.value) ?? {})
     } catch {
       /* 忽略坏数据 */
     }
@@ -33,13 +34,7 @@ function getSettings(): NotifSettings {
 }
 
 function getSetting<T>(key: string, fallback: T): T {
-  const row = sqlite.prepare('SELECT value FROM settings WHERE key = ?').get(key) as { value: string } | undefined
-  if (!row) return fallback
-  try {
-    return JSON.parse(row.value) as T
-  } catch {
-    return fallback
-  }
+  return readSetting(sqlite, key, fallback)
 }
 
 // ===== 学习通作业：截止提醒 + 自动同步 =====

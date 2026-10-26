@@ -1,11 +1,10 @@
 import { randomUUID } from 'node:crypto'
-import { mkdirSync } from 'node:fs'
+import { lstatSync, mkdirSync } from 'node:fs'
 import path from 'node:path'
-import { fileURLToPath } from 'node:url'
+import { resolveDataDir } from '../config.js'
 import type { FastifyPluginAsync } from 'fastify'
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url))
-export const uploadsDir = path.resolve(__dirname, '../../data/uploads')
+export const uploadsDir = path.join(resolveDataDir(), 'uploads')
 mkdirSync(uploadsDir, { recursive: true })
 
 const MIME_BY_EXT: Record<string, string> = {
@@ -46,6 +45,7 @@ export const uploadRoutes: FastifyPluginAsync = async (app) => {
     if (!mime) throw Object.assign(new Error('不支持的文件类型'), { statusCode: 404 })
     const { readFile } = await import('node:fs/promises')
     try {
+      if (lstatSync(path.join(uploadsDir, name)).isSymbolicLink()) throw new Error('非法链接')
       const buf = await readFile(path.join(uploadsDir, name))
       reply.type(mime).send(buf)
     } catch {

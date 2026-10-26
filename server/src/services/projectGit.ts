@@ -10,12 +10,13 @@ import path from 'node:path'
 import { db } from '../db/index.js'
 import { projects } from '../db/schema.js'
 import { eq } from 'drizzle-orm'
+import { READ_ONLY_GIT_OPTIONS } from './gitSafety.js'
 
 const bad = (msg: string, code = 400) => Object.assign(new Error(msg), { statusCode: code })
 
 function git(dir: string, args: string[], timeout = 8000): Promise<string> {
   return new Promise((resolve, reject) => {
-    execFile('git', ['-C', dir, ...args], { timeout, maxBuffer: 2 << 20, windowsHide: true }, (err, stdout, stderr) => {
+    execFile('git', [...READ_ONLY_GIT_OPTIONS, '-C', dir, ...args], { timeout, maxBuffer: 2 << 20, windowsHide: true }, (err, stdout, stderr) => {
       if (err) reject(new Error(String(stderr || err.message).trim().slice(0, 200)))
       else resolve(stdout)
     })

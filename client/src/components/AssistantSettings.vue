@@ -75,7 +75,7 @@ onMounted(() => { void loadPets() })
       <h4>DeepSeek API</h4>
       <el-input v-model="keyValue" type="password" show-password autocomplete="off" aria-label="DeepSeek API Key" :placeholder="assistant.config?.keyMask || '填写 sk-…'" @keydown.enter="save('key')" />
       <div class="setting-actions"><a href="https://platform.deepseek.com/api_keys" target="_blank" rel="noopener noreferrer">获取 API Key</a><el-button :loading="saving === 'key'" :disabled="!!saving || (!keyValue.trim() && !assistant.config?.configured)" @click="save('key')">{{ keyValue.trim() || !assistant.config?.configured ? '保存 Key' : '移除 Key' }}</el-button></div>
-      <small>Key 仅保存在本机；对话会将问题和相关记录发送至 DeepSeek。</small>
+      <small>Key 在本机加密保存，主密钥由系统凭据库保护；换电脑后需重新填写。对话会将问题和相关记录发送至 DeepSeek。</small>
     </div>
     <div class="settings-group">
       <h4>桌宠</h4>

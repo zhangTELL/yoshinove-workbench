@@ -1,5 +1,8 @@
 import { sqlite } from '../db/index.js'
 import { getAdapter, listProviderMeta, runAdapter } from './balance.js'
+import { maskStoredSecret, openSecret, readSetting as readCredentialSetting } from '../security/credentials.js'
+import { redactDebugValue, redactSensitiveError } from '../security/outbound.js'
+import { redactProfileAddress } from '../security/profileAddress.js'
 
 /**
  * 余额监控的数据访问层。
@@ -34,9 +37,12 @@ export function nowLocal(): string {
 }
 
 export function mask(secret: string): string {
-  if (!secret) return ''
-  if (secret.length <= 10) return '••••••'
-  return `${secret.slice(0, 6)}••••${secret.slice(-4)}`
+  return maskStoredSecret(secret)
+}
+
+export function displayProfileAddress(stored: string): string {
+  try { return redactProfileAddress(openSecret(stored)) }
+  catch { return '（接口地址需重新填写）' }
 }
 
 export function selectProfiles(): ProfileRow[] {
@@ -49,11 +55,11 @@ export function toProfileDTO(r: ProfileRow) {
     id: r.id,
     name: r.name,
     provider: r.provider,
-    baseUrl: r.base_url,
+    baseUrl: displayProfileAddress(r.base_url),
     model: r.model,
     enabled: !!r.enabled,
     authStyle: r.auth_style,
-    balancePath: r.balance_path,
+    balancePath: displayProfileAddress(r.balance_path),
     balanceEnabled: !!r.balance_enabled,
     hasApiKey: !!r.api_key,
     apiKeyMasked: mask(r.api_key),
@@ -63,13 +69,7 @@ export function toProfileDTO(r: ProfileRow) {
 }
 
 export function readSetting<T>(key: string, fallback: T): T {
-  const row = sqlite.prepare('SELECT value FROM settings WHERE key = ?').get(key) as { value: string } | undefined
-  if (!row) return fallback
-  try {
-    return JSON.parse(row.value) as T
-  } catch {
-    return fallback
-  }
+  return readCredentialSetting(sqlite, key, fallback)
 }
 
 function latestSnapshotRow(profileId: number) {
@@ -111,16 +111,23 @@ export async function refreshProfiles(rows: ProfileRow[]): Promise<RunOutcome[]>
     // 来源标签取自适配器本身，而不是抓取结果——逆向平台即使抓成功也必须标成 reverse
     const adapter = getAdapter(row.provider)
     const source = adapter?.source ?? 'manual'
+    let apiKey: string
+    let apiSecret: string
+    let baseUrl: string
+    let balancePath: string
+    try { apiKey = openSecret(row.api_key); apiSecret = openSecret(row.api_secret); baseUrl = openSecret(row.base_url); balancePath = openSecret(row.balance_path) }
+    catch (error) { outcomes.push({ profileId: row.id, profileName: row.name, status: 'error', error: redactSensitiveError(error) }); continue }
     const result = await runAdapter({
       provider: row.provider,
-      apiKey: row.api_key,
-      apiSecret: row.api_secret,
-      baseUrl: row.base_url,
-      balancePath: row.balance_path,
+      apiKey,
+      apiSecret,
+      baseUrl,
+      balancePath,
       authStyle: row.auth_style,
     })
     const capturedAt = nowLocal()
-    const raw = JSON.stringify(result.raw ?? null).slice(0, 4000)
+    const raw = redactDebugValue(result.raw ?? null, [apiKey, apiSecret]).slice(0, 4000)
+    const safeError = result.error ? redactSensitiveError(result.error, [apiKey, apiSecret]) : undefined
     const b = result.balance
     const info = sqlite
       .prepare(
@@ -138,7 +145,7 @@ export async function refreshProfiles(rows: ProfileRow[]): Promise<RunOutcome[]>
         b?.granted ?? null,
         b?.toppedUp ?? null,
         b?.available ?? null,
-        result.error ?? '',
+        safeError ?? '',
         raw,
       )
     const snapshotId = Number(info.lastInsertRowid)
@@ -151,7 +158,7 @@ export async function refreshProfiles(rows: ProfileRow[]): Promise<RunOutcome[]>
         )
         .run(row.id, snapshotId, capturedAt, q.label, q.type, q.limitValue, q.usedValue, q.remaining, q.percentage, q.resetAt)
     }
-    outcomes.push({ profileId: row.id, profileName: row.name, status: result.status, error: result.error })
+    outcomes.push({ profileId: row.id, profileName: row.name, status: result.status, error: safeError })
   }
   return outcomes
 }

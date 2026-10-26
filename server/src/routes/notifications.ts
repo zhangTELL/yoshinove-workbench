@@ -3,15 +3,10 @@ import type { FastifyPluginAsync } from 'fastify'
 import { db, sqlite } from '../db/index.js'
 import { notificationLog } from '../db/schema.js'
 import { sendPushPlus, sendWecom } from '../services/push.js'
+import { readSetting } from '../security/credentials.js'
 
 function getSetting<T>(key: string, fallback: T): T {
-  const row = sqlite.prepare('SELECT value FROM settings WHERE key = ?').get(key) as { value: string } | undefined
-  if (!row) return fallback
-  try {
-    return JSON.parse(row.value) as T
-  } catch {
-    return fallback
-  }
+  return readSetting(sqlite, key, fallback)
 }
 
 export const notificationRoutes: FastifyPluginAsync = async (app) => {

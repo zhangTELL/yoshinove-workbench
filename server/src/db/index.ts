@@ -2,14 +2,15 @@ import Database from 'better-sqlite3'
 import { drizzle } from 'drizzle-orm/better-sqlite3'
 import { mkdirSync } from 'node:fs'
 import path from 'node:path'
-import { fileURLToPath } from 'node:url'
+import { resolveDataDir } from '../config.js'
 import { textKeyOf, workKeyOf } from '../services/chaoxingKey.js'
 import * as schema from './schema.js'
 import { COMPARISON_SCHEMA_SQL } from './comparisonSchema.js'
 import { ensureAssistantSchema } from './assistantSchema.js'
+import { migrateCredentials } from '../security/credentials.js'
+import { sanitizeGitRemote } from '../services/gitSafety.js'
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url))
-const dataDir = process.env.WORKBENCH_DATA_DIR || path.resolve(__dirname, '../../data')
+const dataDir = resolveDataDir()
 mkdirSync(dataDir, { recursive: true })
 
 export const sqlite = new Database(path.join(dataDir, 'workbench.db'))
@@ -306,6 +307,13 @@ export function ensureSchema() {
   addColumn('model_profiles', 'api_secret', "TEXT NOT NULL DEFAULT ''")
   addColumn('model_profiles', 'balance_path', "TEXT NOT NULL DEFAULT ''")
   addColumn('model_profiles', 'balance_enabled', 'INTEGER NOT NULL DEFAULT 1')
+  const remotes = sqlite.prepare('SELECT id, git_remote FROM projects WHERE git_remote IS NOT NULL').all() as { id: number; git_remote: string }[]
+  const updateRemote = sqlite.prepare('UPDATE projects SET git_remote = ? WHERE id = ?')
+  for (const row of remotes) {
+    const safe = sanitizeGitRemote(row.git_remote)
+    if (safe !== row.git_remote) updateRemote.run(safe, row.id)
+  }
+  migrateCredentials(sqlite)
 }
 
 /** 一行作业的原始列（迁移用，避免依赖 drizzle 类型） */

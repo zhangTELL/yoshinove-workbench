@@ -4,6 +4,7 @@ import { db, sqlite } from '../db/index.js'
 import { chaoxingHomework } from '../db/schema.js'
 import { getStatus, initChaoxing, syncAll, upsertWorks, validateCookie } from '../services/chaoxing.js'
 import { courseIdentityKey, courseIdentityOf } from '../services/chaoxingKey.js'
+import { encodeSettingValue } from '../security/credentials.js'
 
 export const chaoxingRoutes: FastifyPluginAsync = async (app) => {
   initChaoxing(sqlite)
@@ -25,7 +26,7 @@ export const chaoxingRoutes: FastifyPluginAsync = async (app) => {
     }
     sqlite.prepare(
       "INSERT INTO settings (key, value) VALUES ('chaoxing.cookie', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
-    ).run(JSON.stringify(clean))
+    ).run(encodeSettingValue('chaoxing.cookie', clean))
     return { ok: true, detail: check.detail, uid: check.uid }
   })
 

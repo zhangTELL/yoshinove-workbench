@@ -1,4 +1,5 @@
 import { createHash, createHmac, randomUUID } from 'node:crypto'
+import { redactSensitiveError, safeFetch } from '../security/outbound.js'
 
 /**
  * AI 平台账户余额 / 套餐额度适配器。
@@ -111,7 +112,7 @@ async function request(url: string, init: RequestInit = {}, timeoutMs = 12000): 
   const ctrl = new AbortController()
   const timer = setTimeout(() => ctrl.abort(), timeoutMs)
   try {
-    const res = await fetch(url, { ...init, signal: ctrl.signal })
+    const res = await safeFetch(url, { ...init, signal: ctrl.signal })
     const text = await res.text()
     let body: unknown = null
     try {
@@ -659,7 +660,7 @@ export async function runAdapter(profile: {
       authStyle: (profile.authStyle || 'bearer') as AuthStyle,
     })
   } catch (e) {
-    return { status: 'error', error: `适配器异常：${(e as Error).message}` }
+    return { status: 'error', error: `适配器异常：${redactSensitiveError(e, [profile.apiKey, profile.apiSecret])}` }
   }
 
   // 兜底防线：接口返回成功但一个数字都没解析出来，说明字段变了或返回了错误体，
@@ -671,5 +672,6 @@ export async function runAdapter(profile: {
       raw: result.raw,
     }
   }
+  if (result.error) result.error = redactSensitiveError(result.error, [profile.apiKey, profile.apiSecret])
   return result
 }

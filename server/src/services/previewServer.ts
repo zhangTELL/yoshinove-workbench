@@ -2,7 +2,7 @@
  * P8-4：本地预览服务器——给带 index.html 的项目起一个只读静态服务
  *
  * 生命周期：每个项目最多一个实例（幂等启动）；服务进程退出时端口随之释放。
- * 安全：以 index.html 所在目录为根，**逐请求 realpath 校验**，永远出不了项目目录。
+ * 安全：以 index.html 所在目录为根，通过逐请求 realpath 校验限制静态资源读取范围。
  */
 import http from 'node:http'
 import { createReadStream, existsSync, realpathSync, statSync } from 'node:fs'
@@ -13,7 +13,17 @@ import { projects } from '../db/schema.js'
 
 const bad = (msg: string, code = 400) => Object.assign(new Error(msg), { statusCode: code })
 
-const norm = (p: string) => (process.platform === 'win32' ? p.toLowerCase() : p)
+function withinRoot(root: string, target: string): boolean {
+  const relative = path.relative(root, target)
+  return !path.isAbsolute(relative) && relative !== '..' && !relative.startsWith(`..${path.sep}`)
+}
+
+/** 项目预览不能把仓库中的凭据、数据库和备份当作静态资源发布。 */
+function sensitivePath(relative: string): boolean {
+  const parts = relative.split(/[\\/]/).filter(Boolean)
+  return parts.some(part => part.startsWith('.')) || /(?:\.(?:key|pem|p12|pfx|jks|keystore|bak|old)|\.(?:db|sqlite|sqlite3)(?:-(?:wal|shm|journal))?|~)$/i.test(relative)
+    || /^(?:credentials|secrets|service-account)\.json$/i.test(parts.at(-1) || '')
+}
 
 interface Preview {
   server: http.Server
@@ -123,14 +133,27 @@ export async function startPreview(projectId: number): Promise<PreviewStatus> {
       res.end(msg)
     }
     try {
+      const port = (server.address() as import('node:net').AddressInfo).port
+      if (![ `127.0.0.1:${port}`, `localhost:${port}` ].includes((req.headers.host || '').toLowerCase())) {
+        done(403, 'Forbidden')
+        return
+      }
+      if (req.method !== 'GET' && req.method !== 'HEAD') {
+        done(405, 'Method Not Allowed')
+        return
+      }
       const urlPath = decodeURIComponent((req.url ?? '/').split('?')[0])
       let filePath = path.resolve(rootReal, '.' + path.posix.normalize('/' + urlPath))
+      if (sensitivePath(path.relative(rootReal, filePath))) {
+        done(403, 'Forbidden')
+        return
+      }
       // 只在文件确实存在后做 realpath 校验（不存在的路径直接 404，不用逃逸探测）
       if (!existsSync(filePath)) {
         done(404, 'Not Found')
         return
       }
-      if (norm(realpathSync.native(filePath)).startsWith(norm(rootReal) + path.sep) === false && norm(realpathSync.native(filePath)) !== norm(rootReal)) {
+      if (!withinRoot(rootReal, realpathSync.native(filePath))) {
         done(403, 'Forbidden')
         return
       }
@@ -139,8 +162,15 @@ export async function startPreview(projectId: number): Promise<PreviewStatus> {
         done(404, 'Not Found')
         return
       }
-      res.writeHead(200, { 'content-type': mimeOf(filePath) })
-      createReadStream(filePath).pipe(res)
+      // 目录补上 index.html 后必须再检查一次，防止该文件是指向根目录之外的链接。
+      const realFile = realpathSync.native(filePath)
+      if (!withinRoot(rootReal, realFile) || sensitivePath(path.relative(rootReal, realFile))) {
+        done(403, 'Forbidden')
+        return
+      }
+      res.writeHead(200, { 'content-type': mimeOf(realFile), 'x-content-type-options': 'nosniff', 'cross-origin-resource-policy': 'same-origin' })
+      if (req.method === 'HEAD') res.end()
+      else createReadStream(realFile).on('error', () => res.destroy()).pipe(res)
     } catch {
       done(500, 'Internal Error')
     }

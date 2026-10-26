@@ -7,6 +7,8 @@
  *  - 用户目录 + 非系统盘全扫只要 0.3s，因此不为性能牺牲覆盖面，改为严格排除真实噪声源。
  */
 import { execFile } from 'node:child_process'
+import { homedir } from 'node:os'
+import { READ_ONLY_GIT_OPTIONS, sanitizeGitRemote } from './gitSafety.js'
 import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs'
 import path from 'node:path'
 import { eq } from 'drizzle-orm'
@@ -163,7 +165,7 @@ const GIT_TIMEOUT = 5000
 
 function git(dir: string, args: string[]): Promise<string> {
   return new Promise((resolve) => {
-    execFile('git', ['-C', dir, ...args], { timeout: GIT_TIMEOUT, windowsHide: true, maxBuffer: 1 << 20 }, (err, stdout) => {
+    execFile('git', [...READ_ONLY_GIT_OPTIONS, '-C', dir, ...args], { timeout: GIT_TIMEOUT, windowsHide: true, maxBuffer: 1 << 20 }, (err, stdout) => {
       resolve(err ? '' : String(stdout).trim())
     })
   })
@@ -191,7 +193,7 @@ async function readGitInfo(dir: string): Promise<GitInfo> {
     lastCommit: iso || null,
     lastAuthor: author || null,
     lastSubject: subject || null,
-    remote: remote || null,
+    remote: sanitizeGitRemote(remote),
     dirty: statusOut ? statusOut.split('\n').filter(Boolean).length : 0,
   }
 }
@@ -633,11 +635,15 @@ const MAX_ENTRIES = 800
 /** 可用起点：所有存在的盘符 + 用户主目录 */
 export function listRoots(): { name: string; path: string }[] {
   const roots: { name: string; path: string }[] = []
-  for (const letter of 'CDEFGHIJKLMNOPQRSTUVWXYZ') {
-    const drive = `${letter}:\\`
-    if (existsSync(drive)) roots.push({ name: `${letter}: 盘`, path: drive })
+  if (process.platform === 'win32') {
+    for (const letter of 'CDEFGHIJKLMNOPQRSTUVWXYZ') {
+      const drive = `${letter}:\\`
+      if (existsSync(drive)) roots.push({ name: `${letter}: 盘`, path: drive })
+    }
+  } else {
+    roots.push({ name: '文件系统', path: '/' })
   }
-  const home = process.env.USERPROFILE
+  const home = homedir()
   if (home && existsSync(home)) roots.unshift({ name: '用户目录', path: home })
   return roots
 }
@@ -647,7 +653,7 @@ export function listRoots(): { name: string; path: string }[] {
  * 跳过符号链接/junction，避免选择器里出现循环入口。
  */
 export function listDirs(target?: string): DirListing {
-  const current = target && existsSync(target) ? path.resolve(target) : (listRoots()[0]?.path ?? 'C:\\')
+  const current = target && existsSync(target) ? path.resolve(target) : (listRoots()[0]?.path ?? path.parse(homedir()).root)
   let entries: DirEntry[] = []
   try {
     const dirents = readdirSync(current, { withFileTypes: true })

@@ -56,6 +56,12 @@
 
 本机验证过的版本：Node `v26.2.0` + pnpm `11.18.0`。
 
+数据默认保存在 `server/data`，可通过 `WORKBENCH_DATA_DIR` 更换目录；数据库、图片、笔记主题和桌宠配置统一使用该目录，更换前请先复制原数据。网页与后端端口可分别用 `WORKBENCH_WEB_PORT` 和 `PORT` 配置，默认 `5173` / `5175`，仅监听本机。
+
+API Key、Cookie 和推送凭据加密保存，主密钥由 Windows 凭据管理器、macOS 钥匙串或 Linux Secret Service 保护；复制数据到另一台电脑后需重新填写凭据。无桌面环境可通过 `WORKBENCH_SECRET_KEY` 提供 32 字节随机密钥的 Base64 编码，需自行保管且不可提交仓库；系统凭据库不可用时不会改成明文保存。启用加密后，请勿用旧版程序写入同一数据目录。
+
+Typora 主题目录会按当前系统和用户自动查找，也可用 `WORKBENCH_TYPORA_THEMES_DIR` 指定。
+
 > 如果机器上装了多个 Node，注意确认 `node -v` 是 26。常见情况是 shell 的 PATH 里有更新的 Node，而项目需要的是 26。
 
 ---

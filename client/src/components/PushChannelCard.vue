@@ -124,7 +124,7 @@ const channelName: Record<string, string> = {
     <el-form label-width="140px" style="max-width: 640px">
       <el-divider content-position="left">PushPlus（微信）</el-divider>
       <el-form-item label="PushPlus Token">
-        <el-input v-model="notification.pushplusToken" placeholder="在 pushplus.plus 注册后获取" show-password />
+        <el-input v-model="notification.pushplusToken" type="password" autocomplete="off" placeholder="在 pushplus.plus 注册后获取" show-password />
       </el-form-item>
       <el-divider content-position="left">企业微信应用消息</el-divider>
       <el-form-item label="企业 ID (corpId)">
@@ -134,7 +134,7 @@ const channelName: Record<string, string> = {
         <el-input v-model="notification.wecom.agentId" />
       </el-form-item>
       <el-form-item label="应用 Secret">
-        <el-input v-model="notification.wecom.secret" show-password />
+        <el-input v-model="notification.wecom.secret" type="password" autocomplete="off" show-password />
       </el-form-item>
       <el-form-item label="接收用户">
         <el-input v-model="notification.wecom.toUser" placeholder="@all 或成员账号，多个用 | 分隔" />

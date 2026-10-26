@@ -9,7 +9,8 @@
  *  ③ 只写**已存在的文本文件**，单次 ≤ 2MB，写前自动备份 `<文件名>.bak`；
  *  ④ P8-2 不做新建 / 删除 / 重命名（避免误操作破坏项目）。
  */
-import { copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync, realpathSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs'
+import { randomUUID } from 'node:crypto'
+import { closeSync, constants, copyFileSync, existsSync, lstatSync, mkdirSync, openSync, readSync, readdirSync, realpathSync, renameSync, rmSync, statSync, unlinkSync, writeFileSync } from 'node:fs'
 import path from 'node:path'
 import { eq } from 'drizzle-orm'
 import { db } from '../db/index.js'
@@ -28,6 +29,11 @@ const bad = (msg: string, code = 400) => Object.assign(new Error(msg), { statusC
 
 /** Windows 文件系统大小写不敏感，路径比较统一走这个 */
 const norm = (p: string) => (process.platform === 'win32' ? p.toLowerCase() : p)
+
+function withinRoot(root: string, target: string): boolean {
+  const relative = path.relative(norm(root), norm(target))
+  return !path.isAbsolute(relative) && relative !== '..' && !relative.startsWith(`..${path.sep}`)
+}
 
 /** realpath 失败（路径不存在/无权限）时退回 resolve，保证不抛异常 */
 function realOr(p: string): string {
@@ -61,7 +67,7 @@ export function resolveInProject(id: number, relRaw: string): { root: string; ab
   const root = realOr(proj.path)
   const raw = String(relRaw ?? '')
   // 显式拒绝绝对路径（含盘符 / UNC），避免歧义：本接口只接受项目内相对路径
-  if (/^[a-zA-Z]:[\\/]/.test(raw) || raw.startsWith('\\\\') || raw.startsWith('//')) {
+  if (raw.includes(':') || raw.includes('\0') || raw.startsWith('\\\\') || raw.startsWith('//')) {
     throw bad('请提供项目内的相对路径')
   }
   // 统一分隔符、去掉前导斜杠
@@ -69,14 +75,14 @@ export function resolveInProject(id: number, relRaw: string): { root: string; ab
   const abs = path.resolve(root, rel)
 
   // ① 字符串层：挡住 ../ 逃逸
-  if (norm(abs) !== norm(root) && !norm(abs).startsWith(norm(root) + path.sep)) {
+  if (!withinRoot(root, abs)) {
     throw bad('路径超出项目范围')
   }
 
   // ② 文件系统层：挡住符号链接 / junction 指向项目外
   const probe = existsSync(abs) ? abs : path.dirname(abs)
   const realProbe = realOr(probe)
-  if (norm(realProbe) !== norm(root) && !norm(realProbe).startsWith(norm(root) + path.sep)) {
+  if (!withinRoot(root, realProbe)) {
     throw bad('该路径是指向项目之外的链接，已拒绝访问')
   }
 
@@ -281,6 +287,7 @@ export function readProjectFile(id: number, relRaw: string): FileContent {
     throw bad('文件不存在', 404)
   }
   if (st.isDirectory()) throw bad('这是一个文件夹')
+  if (!st.isFile()) throw bad('只支持读取普通文件')
 
   const ext = path.extname(abs).toLowerCase().replace(/^\./, '')
   const name = path.basename(abs)
@@ -300,13 +307,19 @@ export function readProjectFile(id: number, relRaw: string): FileContent {
   }
 
   // 无扩展名的文件也做个探测（前 8KB 有 NUL 字节就当二进制）
-  const buf = readFileSync(abs)
+  const limit = st.size > MAX_READ ? TRUNCATE_AT : MAX_READ + 1
+  const buffer = Buffer.alloc(limit)
+  const fd = openSync(abs, 'r')
+  let bytesRead: number
+  try { bytesRead = readSync(fd, buffer, 0, limit, 0) }
+  finally { closeSync(fd) }
+  const buf = buffer.subarray(0, bytesRead)
   const head = buf.subarray(0, 8192)
   if (head.includes(0)) {
     return { ...base, kind: 'binary', content: null, truncated: false, editable: false }
   }
 
-  if (buf.length > MAX_READ) {
+  if (st.size > MAX_READ || buf.length > MAX_READ) {
     // 给前 512KB 让用户能看个大概，但明确不可保存（避免把截断内容写回去毁掉文件）
     return {
       ...base,
@@ -338,6 +351,7 @@ export function writeProjectFile(id: number, relRaw: string, content: string): W
   if (!existsSync(abs)) throw bad('文件不存在（本版本不支持新建文件）', 404)
   const st = statSync(abs)
   if (st.isDirectory()) throw bad('这是一个文件夹')
+  if (!st.isFile() || st.nlink > 1) throw bad('只支持保存没有硬链接的普通文件')
 
   const ext = path.extname(abs).toLowerCase().replace(/^\./, '')
   if (BINARY_EXTS.has(ext)) throw bad('不支持编辑二进制文件')
@@ -347,10 +361,17 @@ export function writeProjectFile(id: number, relRaw: string, content: string): W
 
   // 备份：同名 .bak，覆盖旧备份（只留最近一次，避免堆一堆文件）
   const backupPath = `${abs}.bak`
+  const backup = lstatSync(backupPath, { throwIfNoEntry: false })
+  if (backup?.isSymbolicLink() || (backup && !backup.isFile())) throw bad('备份位置不是普通文件，已取消保存')
+  const temporaryBackup = `${backupPath}.${randomUUID()}.tmp`
   try {
-    copyFileSync(abs, backupPath)
+    // 替换备份目录项，避免覆盖已有 .bak 硬链接指向的项目外文件。
+    copyFileSync(abs, temporaryBackup, constants.COPYFILE_EXCL)
+    renameSync(temporaryBackup, backupPath)
   } catch (e) {
     throw bad(`创建备份失败，已取消保存：${(e as Error).message}`, 500)
+  } finally {
+    try { unlinkSync(temporaryBackup) } catch {}
   }
 
   writeFileSync(abs, content, 'utf8')
@@ -368,6 +389,7 @@ function assertName(name: string): string {
   if (!n) throw bad('名称不能为空')
   if (n.length > 200) throw bad('名称太长了')
   if (BAD_NAME.test(n)) throw bad('名称不能包含 \ / : * ? " < > | 字符')
+  if (/[. ]$/.test(n) || /^(?:con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\.|$)/i.test(n)) throw bad('名称不能使用 Windows 保留名称或以句点结尾')
   if (n === '.' || n === '..' || n.startsWith('.git') || n.toLowerCase() === 'node_modules') {
     throw bad('这个名称会被保留，换一个吧')
   }
@@ -393,10 +415,10 @@ export function createEntry(id: number, relDirRaw: string, name: string, kind: '
 
   const clean = assertName(name)
   const target = path.join(dirAbs, clean)
-  if (existsSync(target)) throw bad(`「${clean}」已经存在了`, 409)
+  if (lstatSync(target, { throwIfNoEntry: false })) throw bad(`「${clean}」已经存在了`, 409)
 
   if (kind === 'dir') mkdirSync(target)
-  else writeFileSync(target, '', 'utf8')
+  else writeFileSync(target, '', { encoding: 'utf8', flag: 'wx' })
 
   const rel = dirRel ? `${dirRel}/${clean}` : clean
   return { rel, name: clean, kind }
@@ -408,7 +430,7 @@ export function renameEntry(id: number, relRaw: string, newName: string): { rel:
   if (!rel) throw bad('不能重命名项目根目录')
   const clean = assertName(newName)
   const target = path.join(path.dirname(abs), clean)
-  if (existsSync(target)) throw bad(`「${clean}」已经存在了`, 409)
+  if (lstatSync(target, { throwIfNoEntry: false })) throw bad(`「${clean}」已经存在了`, 409)
   renameSync(abs, target)
   const parent = rel.includes('/') ? rel.slice(0, rel.lastIndexOf('/')) : ''
   return { rel: parent ? `${parent}/${clean}` : clean }

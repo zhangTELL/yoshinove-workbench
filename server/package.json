@@ -4,12 +4,13 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "tsx watch src/index.ts",
+    "dev": "tsx watch --conditions=development src/index.ts",
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test:comparisons": "tsx --test tests/comparisons.test.ts",
-    "test:assistant": "tsx --test tests/assistant.test.ts",
-    "test:chaoxing": "tsx --test tests/chaoxing.test.ts",
+    "test": "tsx --conditions=development --test tests/*.test.ts",
+    "test:comparisons": "tsx --conditions=development --test tests/comparisons.test.ts",
+    "test:assistant": "tsx --conditions=development --test tests/assistant.test.ts",
+    "test:chaoxing": "tsx --conditions=development --test tests/chaoxing.test.ts",
     "start": "node dist/index.js"
   },
   "dependencies": {

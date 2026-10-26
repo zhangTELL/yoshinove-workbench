@@ -29,6 +29,7 @@ import { detectStack } from '../services/projectStack.js'
 import { readGitDetail } from '../services/projectGit.js'
 import { previewStatus, startPreview, stopPreview } from '../services/previewServer.js'
 import { appIcon, listApps, openInApp } from '../services/openInApp.js'
+import { sanitizeGitRemote } from '../services/gitSafety.js'
 
 export const projectRoutes: FastifyPluginAsync = async (app) => {
   // ===== 扫描（手动指定目录；只产出预览，不写库）=====
@@ -308,7 +309,7 @@ export const projectRoutes: FastifyPluginAsync = async (app) => {
       weakCount: rows.filter((r) => r.score < 50 && !r.hidden).length,
       nestedCount: nestedVisible,
       stacks,
-      list,
+      list: list.map(row => ({ ...row, gitRemote: sanitizeGitRemote(row.gitRemote) })),
     }
   })
 

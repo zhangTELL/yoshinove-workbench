@@ -1,8 +1,8 @@
 import { Readable } from 'node:stream'
 import { existsSync } from 'node:fs'
 import { homedir } from 'node:os'
-import { resolve, dirname, join } from 'node:path'
-import { fileURLToPath } from 'node:url'
+import { join } from 'node:path'
+import { resolveDataDir } from '../config.js'
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import type { FastifyPluginAsync } from 'fastify'
 import type { createAssistant } from '../services/assistant.js'
@@ -36,8 +36,7 @@ function withTimeout<T>(task: Promise<T>, ms: number, label: string): Promise<T>
 }
 export const petRoutes: FastifyPluginAsync<{ assistant: Assistant; port: number }> = async (app, { assistant, port }) => {
   if (process.env.WORKBENCH_DISABLE_PET === '1') return
-  const home = process.env.WORKBENCH_DATA_DIR || resolve(dirname(fileURLToPath(import.meta.url)), '../../data')
-  process.env.WORKBENCH_PET_HOME = join(home, 'pet')
+  process.env.WORKBENCH_PET_HOME = join(resolveDataDir(), 'pet')
   const existingElectron = join(homedir(), '.dsh/electron', process.platform === 'win32' ? 'electron.exe' : 'electron')
   if (!process.env.DSH_PET_ELECTRON_PATH && existsSync(existingElectron)) process.env.DSH_PET_ELECTRON_PATH = existingElectron
   const loadRuntime = async (): Promise<PetRuntime> => {

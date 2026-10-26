@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict'
+import { randomBytes } from 'node:crypto'
 import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -11,6 +12,7 @@ import { ensureAssistantSchema } from '../src/db/assistantSchema.js'
 
 const temporary = mkdtempSync(join(tmpdir(), 'yw-assistant-test-'))
 process.env.WORKBENCH_DATA_DIR = temporary
+process.env.WORKBENCH_SECRET_KEY = randomBytes(32).toString('base64')
 const { sqlite: template, ensureSchema } = await import('../src/db/index.js')
 ensureSchema()
 template.pragma('journal_mode = DELETE')

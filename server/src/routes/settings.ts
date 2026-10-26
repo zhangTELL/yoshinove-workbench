@@ -2,6 +2,7 @@ import { eq } from 'drizzle-orm'
 import type { FastifyPluginAsync } from 'fastify'
 import { db, sqlite } from '../db/index.js'
 import { settings } from '../db/schema.js'
+import { encodeSettingValue, maskStoredSecret, SECRET_SETTING_KEYS } from '../security/credentials.js'
 
 /* ===== 敏感设置的掩码（2026-10-01 审查修复 #1）=====
    GET /api/settings 会把学习通 Cookie、PushPlus Token、企业微信 Secret 原样吐给页面。
@@ -9,20 +10,19 @@ import { settings } from '../db/schema.js'
    ⭐ 写入端必须配套：PUT 时识别出「掩码串」就跳过/还原——否则 PushChannelCard 这类
    "读出来 → 原样存回" 的组件会把掩码当成真值覆盖进库。真实凭据不会以 •••• 开头
    （pushplus 是 32 位 hex、企业微信 secret 是字母数字、cookie 是长 base64），误判概率为零。 */
-const SECRET_KEYS = new Set(['chaoxing.cookie', 'notification.pushplusToken', 'assistant.deepseekKey'])
+const SECRET_KEYS = SECRET_SETTING_KEYS
 const SECRET_NESTED: Record<string, readonly string[]> = { 'notification.wecom': ['secret'] }
 const MASK_PREFIX = '••••'
 
 function maskSecret(v: string): string {
-  if (!v) return v
-  return MASK_PREFIX + v.slice(-4)
+  return maskStoredSecret(v)
 }
 
 const isMasked = (v: unknown): boolean => typeof v === 'string' && v.startsWith(MASK_PREFIX)
 
 /** 深拷贝并对敏感字段打掩码（只处理上面登记的键，其它设置原样透出） */
 function maskSettingsMap(input: Record<string, unknown>): Record<string, unknown> {
-  const out: Record<string, unknown> = {}
+  const out: Record<string, unknown> = Object.create(null)
   for (const [key, value] of Object.entries(input)) {
     if (SECRET_KEYS.has(key) && typeof value === 'string') {
       out[key] = maskSecret(value)
@@ -54,7 +54,7 @@ function readRawSetting(key: string): unknown {
 export const settingsRoutes: FastifyPluginAsync = async (app) => {
   app.get('/api/settings', async () => {
     const rows = db.select().from(settings).all()
-    const out: Record<string, unknown> = {}
+    const out: Record<string, unknown> = Object.create(null)
     for (const r of rows) {
       try {
         out[r.key] = JSON.parse(r.value)
@@ -65,8 +65,12 @@ export const settingsRoutes: FastifyPluginAsync = async (app) => {
     return maskSettingsMap(out)
   })
 
-  app.put('/api/settings', async (req) => {
+  app.put('/api/settings', async (req, reply) => {
     const body = req.body as Record<string, unknown>
+    if (!body || typeof body !== 'object' || Array.isArray(body)) return reply.code(400).send({ message: '设置内容必须是对象' })
+    if (Object.keys(body).some(key => ['__proto__', 'constructor', 'prototype', 'assistant.currentSession'].includes(key))) {
+      return reply.code(400).send({ message: '此设置不能通过通用接口修改' })
+    }
     const upsert = sqlite.prepare(
       'INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value',
     )
@@ -91,12 +95,12 @@ export const settingsRoutes: FastifyPluginAsync = async (app) => {
             }
           }
           if (touched) {
-            upsert.run(key, JSON.stringify(incoming))
+            upsert.run(key, encodeSettingValue(key, incoming, true))
             continue
           }
         }
 
-        upsert.run(key, JSON.stringify(value))
+        upsert.run(key, encodeSettingValue(key, value))
       }
     })
     tx()

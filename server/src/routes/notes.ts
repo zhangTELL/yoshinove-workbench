@@ -1,15 +1,12 @@
-import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, statSync } from 'node:fs'
+import { cpSync, existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, realpathSync, statSync } from 'node:fs'
 import path from 'node:path'
-import { fileURLToPath } from 'node:url'
+import { resolveDataDir, resolveTyporaThemesDir } from '../config.js'
 import { desc, eq } from 'drizzle-orm'
 import type { FastifyPluginAsync } from 'fastify'
 import { db, sqlite } from '../db/index.js'
 import { notes } from '../db/schema.js'
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url))
-const THEMES_DIR = path.resolve(__dirname, '../../data/themes')
-/** Typora 主题目录（Windows 默认位置） */
-const TYPORA_THEMES_DIR = 'C:\\Users\\zhang\\AppData\\Roaming\\Typora\\themes'
+const THEMES_DIR = path.join(resolveDataDir(), 'themes')
 
 function touchFts(id: number, title: string, content: string) {
   // FTS 表内容仅用于潜在的英文前缀搜索，中文以 LIKE 兜底
@@ -99,7 +96,7 @@ export const noteRoutes: FastifyPluginAsync = async (app) => {
   // 从 Typora 目录导入全部主题（css + 同名/引用的资源目录）
   app.post('/api/notes/themes/import', async (req) => {
     const { source } = (req.body ?? {}) as { source?: string }
-    const src = source && existsSync(source) ? source : TYPORA_THEMES_DIR
+    const src = source?.trim() ? path.resolve(source) : resolveTyporaThemesDir()
     if (!existsSync(src)) {
       throw Object.assign(new Error(`未找到 Typora 主题目录：${src}`), { statusCode: 404 })
     }
@@ -107,7 +104,8 @@ export const noteRoutes: FastifyPluginAsync = async (app) => {
     let copied = 0
     for (const entry of readdirSync(src)) {
       const full = path.join(src, entry)
-      const st = statSync(full)
+      const st = lstatSync(full)
+      if (st.isSymbolicLink()) continue
       // 跳过 old-themes 备份目录
       if (entry === 'old-themes') continue
       if (st.isFile() && entry.endsWith('.css')) {
@@ -115,7 +113,7 @@ export const noteRoutes: FastifyPluginAsync = async (app) => {
         copied++
       } else if (st.isDirectory()) {
         // 资源目录（字体/图片），整体复制
-        cpSync(full, path.join(THEMES_DIR, entry), { recursive: true })
+        cpSync(full, path.join(THEMES_DIR, entry), { recursive: true, filter: candidate => !lstatSync(candidate).isSymbolicLink() })
         copied++
       }
     }
@@ -128,6 +126,8 @@ export const noteRoutes: FastifyPluginAsync = async (app) => {
     if (!/^[\w.-]+\.css$/.test(file)) throw Object.assign(new Error('非法路径'), { statusCode: 400 })
     const full = path.join(THEMES_DIR, file)
     if (!existsSync(full)) throw Object.assign(new Error('主题不存在'), { statusCode: 404 })
+    const relative = path.relative(realpathSync.native(THEMES_DIR), realpathSync.native(full))
+    if (path.isAbsolute(relative) || relative === '..' || relative.startsWith(`..${path.sep}`)) throw Object.assign(new Error('主题路径无效'), { statusCode: 403 })
     reply.type('text/css').send(readFileSync(full))
   })
 }

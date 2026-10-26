@@ -2,9 +2,17 @@ param([switch]$NoBrowser)
 
 $ErrorActionPreference = 'Stop'
 $projectRoot = Split-Path $PSScriptRoot -Parent
-$url = 'http://127.0.0.1:5173'
+. (Join-Path $PSScriptRoot 'workbench-runtime.ps1')
+$runtimePorts = Get-WorkbenchPorts
+$webPort = $runtimePorts.Web
+$apiPort = $runtimePorts.Api
+$url = "http://127.0.0.1:$webPort"
 $started = $null
-$logDirectory = Join-Path $projectRoot 'server/data/launcher'
+$dataDirectory = Join-Path $projectRoot 'server/data'
+if ($env:WORKBENCH_DATA_DIR) {
+    $dataDirectory = if ([System.IO.Path]::IsPathRooted($env:WORKBENCH_DATA_DIR)) { [System.IO.Path]::GetFullPath($env:WORKBENCH_DATA_DIR) } else { [System.IO.Path]::GetFullPath((Join-Path (Join-Path $projectRoot 'server') $env:WORKBENCH_DATA_DIR)) }
+}
+$logDirectory = Join-Path $dataDirectory 'launcher'
 
 function Test-Health([int]$Port) {
     try {
@@ -37,20 +45,20 @@ function Show-LogTail([string]$Path, [string]$Title, [int]$Lines = 25) {
 
 try {
     Set-Location -LiteralPath $projectRoot
-    $serverReady = Test-Health 5175
-    $clientReady = $serverReady -and (Test-Health 5173)
+    $serverReady = Test-Health $apiPort
+    $clientReady = $serverReady -and (Test-Health $webPort)
     if ($clientReady) {
         Write-Host '前后端均已就绪。'
         if (-not $NoBrowser) { Start-Process $url }
         exit 0
     }
 
-    $clientListening = Test-Listening 5173
-    if (-not $serverReady -and (Test-Listening 5175)) {
-        throw '5175 端口已占用，但后端健康检查失败。请检查已有服务，启动器不会关闭未知进程。'
+    $clientListening = Test-Listening $webPort
+    if (-not $serverReady -and (Test-Listening $apiPort)) {
+        throw "$apiPort 端口已占用，但后端健康检查失败。请检查已有服务，启动器不会关闭未知进程。"
     }
     if ($serverReady -and $clientListening) {
-        throw '5173 端口已占用，但前端代理健康检查失败。请检查原前端窗口。'
+        throw "$webPort 端口已占用，但前端代理健康检查失败。请检查原前端窗口。"
     }
 
     $node = Get-Command node -CommandType Application -ErrorAction Stop | Select-Object -First 1
@@ -108,7 +116,7 @@ try {
         [pscustomobject]@{ Name = $Name; Process = $proc; Stdout = $stdoutLog; Stderr = $stderrLog }
     }
     if (-not $serverReady) {
-        $processes += & $launch -Name 'server' -WorkDir (Join-Path $projectRoot 'server') -Arguments @($tsxCli, 'watch', 'src/index.ts')
+        $processes += & $launch -Name 'server' -WorkDir (Join-Path $projectRoot 'server') -Arguments @($tsxCli, 'watch', '--conditions=development', 'src/index.ts')
     }
     if (-not $clientReady) {
         $processes += & $launch -Name 'client' -WorkDir (Join-Path $projectRoot 'client') -Arguments @($viteBin)
@@ -124,8 +132,8 @@ try {
         foreach ($item in $processes) {
             if ($item.Process.HasExited) { throw "$($item.Name) 进程已退出，退出码：$($item.Process.ExitCode)。" }
         }
-        $serverReady = Test-Health 5175
-        $clientReady = $serverReady -and (Test-Health 5173)
+        $serverReady = Test-Health $apiPort
+        $clientReady = $serverReady -and (Test-Health $webPort)
         if ($clientReady) { break }
         if ([DateTime]::UtcNow -gt $deadline) { throw '等待前后端就绪超时，请查看启动日志。' }
         Start-Sleep -Milliseconds 500
@@ -140,7 +148,7 @@ try {
         foreach ($item in $processes) {
             if ($item.Process.HasExited) { throw "$($item.Name) 进程已退出，退出码：$($item.Process.ExitCode)。请查看启动日志。" }
         }
-        if ((Test-Health 5175) -and (Test-Health 5173)) {
+        if ((Test-Health $apiPort) -and (Test-Health $webPort)) {
             $failedChecks = 0
         } else {
             $failedChecks++

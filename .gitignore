@@ -6,6 +6,13 @@ dist
 data/
 *.db
 *.db-journal
+*.db-wal
+*.db-shm
+.env
+.env.*
+!.env.example
+*.jks
+*.keystore
 
 # ===== 日志 =====
 *.log

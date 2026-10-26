@@ -5,15 +5,14 @@ param([switch]$Quiet)
 # 不会误杀机器上其他 node。
 $ErrorActionPreference = 'Stop'
 $projectRoot = Split-Path $PSScriptRoot -Parent
-$ports = 5173, 5175
+. (Join-Path $PSScriptRoot 'workbench-runtime.ps1')
+$runtimePorts = Get-WorkbenchPorts
+$ports = $runtimePorts.Web, $runtimePorts.Api
 
 function Get-WorkbenchProcess {
     Get-CimInstance Win32_Process | Where-Object {
         $commandLine = $_.CommandLine
-        $_.ProcessId -ne $PID -and $commandLine -and (
-            ($_.Name -in @('node.exe', 'electron.exe') -and $commandLine.IndexOf($projectRoot, [System.StringComparison]::OrdinalIgnoreCase) -ge 0) -or
-            ($_.Name -in @('pwsh.exe', 'powershell.exe', 'cmd.exe') -and $commandLine -like '*start-workbench.ps1*')
-        )
+        $_.ProcessId -ne $PID -and (Test-WorkbenchProcessCommand -Name $_.Name -CommandLine $commandLine -ProjectRoot $projectRoot)
     }
 }
 

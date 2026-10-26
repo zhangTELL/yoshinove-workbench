@@ -3,6 +3,8 @@ import type Database from 'better-sqlite3'
 import type { AssistantConfig, AssistantState, AssistantTurn, AssistantChange } from '@wb/shared'
 import { ASSISTANT_ENTITIES, applyChanges, assistantError, entityOf, readRecord, recordDto, undoChanges } from './assistantData.js'
 import type { StoredChange } from './assistantData.js'
+import { encodeSettingValue, maskStoredSecret, parseStoredSetting, readSetting } from '../security/credentials.js'
+import { safeFetch } from '../security/outbound.js'
 
 interface TurnRow { id: string; session_id: string; prompt: string; answer: string; status: AssistantTurn['status']; changes: string; created_at: string }
 type Message = { role: string; content: string | null; tool_calls?: unknown[]; tool_call_id?: string }
@@ -30,11 +32,10 @@ export function createAssistant(database: Database.Database, fetcher: typeof fet
     return { sessionId, sessions, turns: rows.reverse().map(turnDto), pending: pending ? turnDto(pending) : null, busy }
   }
   function setting(name: string, fallback: unknown): unknown {
-    const row = database.prepare('SELECT value FROM settings WHERE key = ?').get(name) as { value: string } | undefined
-    try { return row ? JSON.parse(row.value) : fallback } catch { return fallback }
+    return readSetting(database, name, fallback)
   }
   function writeSetting(name: string, value: unknown) {
-    database.prepare('INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value').run(name, JSON.stringify(value))
+    database.prepare('INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value').run(name, encodeSettingValue(name, value))
   }
   function selectSession(id?: unknown): AssistantState {
     if (busy) throw assistantError('AI 正在处理消息，请稍候再切换会话', 409)
@@ -53,12 +54,13 @@ export function createAssistant(database: Database.Database, fetcher: typeof fet
     })()
   }
   function key(): string {
-    const row = database.prepare('SELECT value FROM settings WHERE key = ?').get(KEY) as { value: string } | undefined
-    try { return row ? String(JSON.parse(row.value)) : '' } catch { return '' }
+    return String(readSetting(database, KEY, ''))
   }
   function config(): AssistantConfig {
-    const apiKey = key()
-    return { configured: !!apiKey, keyMask: apiKey ? '••••' + apiKey.slice(-4) : '', model: MODEL, modelLabel: 'DeepSeek V4.1 Flash', name: String(setting('assistant.name', 'AI助手')), petDoubleClick: setting('assistant.petDoubleClick', 'dialog') === 'sidebar' ? 'sidebar' : 'dialog' }
+    const row = database.prepare('SELECT value FROM settings WHERE key = ?').get(KEY) as { value: string } | undefined
+    const stored = row ? parseStoredSetting(row.value) : ''
+    const apiKey = typeof stored === 'string' ? stored : ''
+    return { configured: !!apiKey, keyMask: maskStoredSecret(apiKey), model: MODEL, modelLabel: 'DeepSeek V4.1 Flash', name: String(setting('assistant.name', 'AI助手')), petDoubleClick: setting('assistant.petDoubleClick', 'dialog') === 'sidebar' ? 'sidebar' : 'dialog' }
   }
   function saveConfig(input: { apiKey?: unknown; name?: unknown; petDoubleClick?: unknown }) {
     const { apiKey, name, petDoubleClick } = input
@@ -124,10 +126,10 @@ export function createAssistant(database: Database.Database, fetcher: typeof fet
       for (let round = 0; round < 9; round++) {
         let response: Response
         try {
-          response = await fetcher('https://api.deepseek.com/chat/completions', {
+          response = await safeFetch('https://api.deepseek.com/chat/completions', {
             method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` }, signal: deadline,
             body: JSON.stringify({ model: MODEL, messages, tools, thinking: { type: 'disabled' }, max_tokens: 12000, stream: false }),
-          })
+          }, { fetcher, secrets: [apiKey] })
         } catch { throw assistantError(deadline.aborted ? 'AI 请求超时，请重试；本次没有修改数据' : '无法连接 DeepSeek，请检查网络后重试', 502) }
         if (!response.ok) {
           await response.body?.cancel()
@@ -207,10 +209,10 @@ export function createAssistant(database: Database.Database, fetcher: typeof fet
   async function whisper(system: string, messages: { role: string; content: unknown }[]): Promise<string> {
     const apiKey = key()
     if (!apiKey) throw assistantError('请先在工作台 AI 助手中填写 DeepSeek API Key')
-    const response = await fetcher('https://api.deepseek.com/chat/completions', {
+    const response = await safeFetch('https://api.deepseek.com/chat/completions', {
       method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` }, signal: AbortSignal.timeout(30000),
       body: JSON.stringify({ model: MODEL, thinking: { type: 'disabled' }, stream: false, max_tokens: 500, messages: [{ role: 'system', content: system.slice(0, 10000) }, ...messages.map(m => ({ role: m.role, content: Array.isArray(m.content) ? m.content.filter(v => v?.type === 'text').map(v => v.text).join('') : String(m.content ?? '') }))] }),
-    })
+    }, { fetcher, secrets: [apiKey] })
     if (!response.ok) { await response.body?.cancel(); throw assistantError(`DeepSeek 请求失败（${response.status}）`, 502) }
     const payload = await response.json() as Completion
     const answer = payload.choices?.[0].message?.content?.trim()

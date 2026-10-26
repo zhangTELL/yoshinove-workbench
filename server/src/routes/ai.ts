@@ -1,9 +1,13 @@
 import type { FastifyPluginAsync } from 'fastify'
 import { sqlite } from '../db/index.js'
+import { isEncryptedSecret, openSecret, sealSecret } from '../security/credentials.js'
+import { redactSensitiveError, safeFetch } from '../security/outbound.js'
+import { validateProfileAddress } from '../security/profileAddress.js'
 import { listProviderMeta } from '../services/balance.js'
 import {
   buildBalanceHistory,
   buildBalanceView,
+  displayProfileAddress,
   nowLocal,
   pruneSnapshots,
   refreshProfiles,
@@ -60,6 +64,9 @@ export const aiRoutes: FastifyPluginAsync = async (app) => {
     if (!name) return reply.code(400).send({ message: '请填写配置名称' })
     const provider = String(b.provider ?? 'custom')
     const meta = listProviderMeta().find((p) => p.id === provider)
+    const baseUrl = String(b.baseUrl ?? meta?.defaultBaseUrl ?? '')
+    validateProfileAddress(baseUrl, true)
+    const balancePath = validateProfileAddress(String(b.balancePath ?? ''), false)
     const info = sqlite
       .prepare(
         `INSERT INTO model_profiles
@@ -68,15 +75,15 @@ export const aiRoutes: FastifyPluginAsync = async (app) => {
       )
       .run(
         name,
-        String(b.baseUrl ?? meta?.defaultBaseUrl ?? ''),
-        String(b.apiKey ?? ''),
+        baseUrl,
+        sealSecret(String(b.apiKey ?? '')),
         String(b.model ?? ''),
         b.enabled === false ? 0 : 1,
         provider,
         // 智谱逆向端点用裸 Key，默认值按平台给对，省得用户踩坑
         String(b.authStyle ?? (provider === 'zhipu' ? 'raw' : 'bearer')),
-        String(b.apiSecret ?? ''),
-        String(b.balancePath ?? ''),
+        sealSecret(String(b.apiSecret ?? '')),
+        balancePath,
         b.balanceEnabled === false ? 0 : 1,
       )
     return { ok: true, id: Number(info.lastInsertRowid) }
@@ -88,8 +95,10 @@ export const aiRoutes: FastifyPluginAsync = async (app) => {
     const cur = getProfile(id)
     if (!cur) return reply.code(404).send({ message: '配置不存在' })
     // Key / Secret 传空表示「不修改」——前端只拿得到掩码，不能回写覆盖真实值
-    const apiKey = typeof b.apiKey === 'string' && b.apiKey !== '' ? b.apiKey : cur.api_key
-    const apiSecret = typeof b.apiSecret === 'string' && b.apiSecret !== '' ? b.apiSecret : cur.api_secret
+    const apiKey = typeof b.apiKey === 'string' && b.apiKey !== '' ? sealSecret(b.apiKey) : isEncryptedSecret(cur.api_key) ? cur.api_key : sealSecret(cur.api_key)
+    const apiSecret = typeof b.apiSecret === 'string' && b.apiSecret !== '' ? sealSecret(b.apiSecret) : isEncryptedSecret(cur.api_secret) ? cur.api_secret : sealSecret(cur.api_secret)
+    const baseUrl = b.baseUrl === undefined || b.baseUrl === displayProfileAddress(cur.base_url) ? cur.base_url : validateProfileAddress(String(b.baseUrl), true)
+    const balancePath = b.balancePath === undefined || b.balancePath === displayProfileAddress(cur.balance_path) ? cur.balance_path : validateProfileAddress(String(b.balancePath), false)
     sqlite
       .prepare(
         `UPDATE model_profiles SET name = ?, base_url = ?, api_key = ?, model = ?, enabled = ?,
@@ -97,14 +106,14 @@ export const aiRoutes: FastifyPluginAsync = async (app) => {
       )
       .run(
         String(b.name ?? cur.name),
-        String(b.baseUrl ?? cur.base_url),
+        baseUrl,
         apiKey,
         String(b.model ?? cur.model),
         b.enabled === undefined ? cur.enabled : b.enabled ? 1 : 0,
         String(b.provider ?? cur.provider),
         String(b.authStyle ?? cur.auth_style),
         apiSecret,
-        String(b.balancePath ?? cur.balance_path),
+        balancePath,
         b.balanceEnabled === undefined ? cur.balance_enabled : b.balanceEnabled ? 1 : 0,
         id,
       )
@@ -157,17 +166,18 @@ export const aiRoutes: FastifyPluginAsync = async (app) => {
     const row = getProfile(b.profileId)
     if (!row) return reply.code(404).send({ message: '配置不存在' })
     if (!row.api_key) return reply.code(400).send({ message: '该配置还没有填 API Key' })
+    const apiKey = openSecret(row.api_key)
 
     const started = Date.now()
     const ctrl = new AbortController()
     const timer = setTimeout(() => ctrl.abort(), 120000)
     try {
-      const res = await fetch(chatUrl(row.base_url), {
+      const res = await safeFetch(chatUrl(openSecret(row.base_url)), {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${row.api_key}` },
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
         body: JSON.stringify({ model: row.model, messages: b.messages ?? [], temperature: b.temperature ?? 0.7 }),
         signal: ctrl.signal,
-      })
+      }, { secrets: [apiKey] })
       const raw = await res.text()
       let body: Record<string, unknown> = {}
       try {
@@ -176,12 +186,12 @@ export const aiRoutes: FastifyPluginAsync = async (app) => {
         /* 非 JSON 响应保持空对象，下面统一报错 */
       }
       if (!res.ok) {
-        return { ok: false, error: `HTTP ${res.status}：${errorMessage(body, raw)}`, text: '', latencyMs: Date.now() - started }
+        return { ok: false, error: `HTTP ${res.status}：${redactSensitiveError(errorMessage(body, raw), [apiKey])}`, text: '', latencyMs: Date.now() - started }
       }
       const { text, tokens } = readCompletion(body)
       return { ok: true, text, latencyMs: Date.now() - started, tokens }
     } catch (e) {
-      const msg = (e as Error).name === 'AbortError' ? '请求超时（120s）' : (e as Error).message
+      const msg = ctrl.signal.aborted ? '请求超时（120s）' : redactSensitiveError(e, [apiKey])
       return { ok: false, error: msg, text: '', latencyMs: Date.now() - started }
     } finally {
       clearTimeout(timer)

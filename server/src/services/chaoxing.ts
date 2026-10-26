@@ -4,6 +4,8 @@ import { eq } from 'drizzle-orm'
 import { db, sqlite } from '../db/index.js'
 import { chaoxingHomework } from '../db/schema.js'
 import { courseIdentityKey, courseIdentityOf, textKeyOf, workKeyOf } from './chaoxingKey.js'
+import { decodeSettingValue } from '../security/credentials.js'
+import { safeFetch, validateOutboundUrl } from '../security/outbound.js'
 
 const UA =
   'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36'
@@ -122,7 +124,7 @@ function getCookie(): string {
     | undefined
   if (!row) return ''
   try {
-    return JSON.parse(row.value) ?? ''
+    return decodeSettingValue('chaoxing.cookie', row.value) as string ?? ''
   } catch {
     return ''
   }
@@ -160,8 +162,16 @@ export interface ChaoxingWork {
   courseStart: string
 }
 
+export function validateChaoxingUrl(value: string | URL): URL {
+  const url = validateOutboundUrl(value)
+  if (url.protocol !== 'https:' || (url.hostname !== 'chaoxing.com' && !url.hostname.endsWith('.chaoxing.com'))) {
+    throw new Error('学习通请求只能发送到 chaoxing.com 的 HTTPS 官方域名')
+  }
+  return url
+}
+
 async function cxFetch(url: string, cookie: string, init?: RequestInit): Promise<Response> {
-  return fetch(url, {
+  return safeFetch(validateChaoxingUrl(url), {
     redirect: 'follow',
     signal: AbortSignal.timeout(15000),
     ...init,
@@ -170,7 +180,7 @@ async function cxFetch(url: string, cookie: string, init?: RequestInit): Promise
       Cookie: cookie,
       ...(init?.headers ?? {}),
     },
-  })
+  }, { secrets: [cookie], allowRedirect: (_from, next) => { validateChaoxingUrl(next); return true } })
 }
 
 /** 校验 Cookie：只看第一跳。首页有重定向循环，绝不能跟随到底 */
