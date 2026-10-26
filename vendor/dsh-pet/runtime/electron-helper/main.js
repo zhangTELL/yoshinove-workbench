@@ -45,7 +45,8 @@ try {
   );
   process.exit(3);
 }
-const { app, BrowserWindow, ipcMain, screen, shell, protocol, globalShortcut } = electronApi;
+const { app, BrowserWindow, ipcMain, screen, shell, protocol, globalShortcut, session } = electronApi;
+const { createBridgeCallbackServer } = require('./bridge-security.js');
 const path = require('node:path');
 const { execFileSync } = require('node:child_process');
 const { readFileSync, writeFileSync } = require('node:fs');
@@ -273,7 +274,6 @@ if (BRIDGE) {
         secure: true,
         supportFetchAPI: true,
         stream: true,
-        bypassCSP: true,
         corsEnabled: true,
       },
     },
@@ -429,11 +429,14 @@ function createPetWindows() {
         preload: path.join(__dirname, 'preload.js'),
         contextIsolation: true,
         nodeIntegration: false,
-        sandbox: false,
+        sandbox: true,
         paintWhenInitiallyHidden: false,
         spellcheck: false,
       },
     });
+    win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
+    win.webContents.on('will-navigate', event => event.preventDefault());
+    win.webContents.on('will-frame-navigate', event => event.preventDefault());
     win.setAlwaysOnTop(true, 'screen-saver');
     win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
     // 窗口被其他窗口（另一只宠物）完全遮挡时，Chromium 默认会暂停本窗口渲染，
@@ -584,39 +587,19 @@ function bridgeResolve(resp) {
 
 /** 本地回调服务器：宿主把应答 POST 到这里（127.0.0.1 随机端口，绕开 stdin/DSH 闸门） */
 function startBridgeCallback() {
-  const http = require('node:http');
-  const server = http.createServer((req, res) => {
-    if (req.method !== 'POST' || req.url !== '/respond') {
-      res.writeHead(404, { 'content-type': 'text/plain' });
-      res.end('dsh-pet: not found');
-      return;
-    }
-    let raw = '';
-    req.on('data', (c) => (raw += c));
-    req.on('end', () => {
-      try {
-        bridgeResolve(JSON.parse(raw));
-        res.writeHead(200, { 'content-type': 'text/plain' });
-        res.end('ok');
-      } catch {
-        res.writeHead(400, { 'content-type': 'text/plain' });
-        res.end('dsh-pet: bad payload');
-      }
-    });
-    req.on('error', () => {
-      res.writeHead(400, { 'content-type': 'text/plain' });
-      res.end('dsh-pet: bad payload');
-    });
-  });
+  const server = createBridgeCallbackServer({ token: process.env.DSH_PET_BRIDGE_TOKEN, onResponse: bridgeResolve });
   server.on('error', (e) => {
     console.error('[dsh-pet-desktop-helper] bridge callback server error:', String(e && e.message ? e.message : e));
   });
-  server.listen(0, '127.0.0.1', () => {
-    const addr = server.address();
-    bridgeCallbackUrl = 'http://127.0.0.1:' + (addr && typeof addr === 'object' ? addr.port : 0) + '/respond';
-    console.error('[dsh-pet-desktop-helper] bridge callback: ' + bridgeCallbackUrl);
+  return new Promise((resolve, reject) => {
+    server.once('error', reject);
+    server.listen(0, '127.0.0.1', () => {
+      const addr = server.address();
+      bridgeCallbackUrl = 'http://127.0.0.1:' + addr.port + '/respond';
+      console.error('[dsh-pet-desktop-helper] bridge callback: ' + bridgeCallbackUrl);
+      resolve(server);
+    });
   });
-  return server;
 }
 
 /** 处理一个渲染端请求：拼宿主请求行 → 等应答 → 组装 Response（素材读盘） */
@@ -643,7 +626,7 @@ async function handleBridgeRequest(request) {
   return new Response(resp.body ?? '', { status: resp.status || 200, headers });
 }
 
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
   // 探测子进程：此时没有 force-device-scale-factor，读到的是 Windows 的真实主屏缩放。
   // 退出推迟一拍——在 ready 回调里直接 app.exit() 会赶在 stdout 落盘前拆掉进程
   if (DPI_PROBE) {
@@ -683,8 +666,12 @@ app.whenReady().then(() => {
         });
       }),
     );
-    startBridgeCallback(); // 宿主应答回调服务器（stdin 在 Electron 主进程不可用，改走本地 HTTP）
+    await startBridgeCallback(); // 先确认认证回调已监听，再让渲染端发送请求。
   }
+
+  const ownsPage = contents => !!contents && [...windows.values()].some(win => !win.isDestroyed() && win.webContents === contents);
+  session.defaultSession.setPermissionRequestHandler((contents, permission, callback) => callback(permission === 'notifications' && ownsPage(contents)));
+  session.defaultSession.setPermissionCheckHandler((contents, permission) => permission === 'notifications' && ownsPage(contents));
 
   createPetWindows();
 
@@ -843,6 +830,11 @@ app.whenReady().then(() => {
       return;
     }
     openSite(url);
+  });
+  // 助手入口使用宿主提供的站点地址，跟随网页端口配置。
+  ipcMain.on('pet:open-assistant', () => {
+    const site = process.env.DSH_PET_SITE_URL || '';
+    if (/^https?:[/][/]/.test(site)) openSite(site);
   });
 
   // 显示器热更新：分辨率/缩放变化、插拔屏、旋转都会让桌面几何失效。原先几何只在
@@ -1070,7 +1062,7 @@ app.whenReady().then(() => {
               return out;
             })(),
           }))()`);
-          console.log(
+          console.error(
             '[dsh-pet-desktop-helper] smoke dump: windows=' +
               windows.size +
               ' ids=' +
@@ -1083,12 +1075,17 @@ app.whenReady().then(() => {
           // setInteractive(false)→恢复整窗穿透（忽略鼠标=true）。状态取自主进程镜像 windowIgnore。
           // 期间暂停兜底轮询：它按真实光标位置翻转，冒烟时鼠标不在宠物身上会覆盖本断言的状态。
           pointerFallbackPaused = true;
+          // 前面的菜单验收会保留输入租约；本段只验证 IPC 往返，暂时隔离该菜单状态。
+          const previousInputBusy = inputBusy.get(first.id);
+          inputBusy.set(first.id, false);
           await first.webContents.executeJavaScript('window.petBridge.setInteractive(true); true;');
           await new Promise((r) => setTimeout(r, 80));
           const interactiveIgnoring = windowIgnore.get(first.id);
           await first.webContents.executeJavaScript('window.petBridge.setInteractive(false); true;');
           await new Promise((r) => setTimeout(r, 80));
           const passthroughIgnoring = windowIgnore.get(first.id);
+          if (previousInputBusy === undefined) inputBusy.delete(first.id);
+          else inputBusy.set(first.id, previousInputBusy);
           pointerFallbackPaused = false;
           console.log(
             '[dsh-pet-desktop-helper] smoke interactive round-trip:',
@@ -1096,7 +1093,18 @@ app.whenReady().then(() => {
           );
           const image = await first.webContents.capturePage();
           writeFileSync(smokeOut, image.toPNG());
-          console.log('[dsh-pet-desktop-helper] smoke capture:', smokeOut);
+          // 宿主可以关闭 debug(stdout) 日志，验收结果仍需可独立读取与断言。
+          writeFileSync(smokeOut + '.json', JSON.stringify({
+            pid: process.pid,
+            capturedAt: new Date().toISOString(),
+            windows: windows.size,
+            ids: [...windows.keys()],
+            bounds: first.getContentBounds(),
+            interactiveIgnoring,
+            passthroughIgnoring,
+            dump,
+          }, null, 2));
+          console.error('[dsh-pet-desktop-helper] smoke capture:', smokeOut);
         }
       } catch (error) {
         console.error('[dsh-pet-desktop-helper] smoke capture failed:', error);

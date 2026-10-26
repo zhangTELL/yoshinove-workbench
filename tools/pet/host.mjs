@@ -8,7 +8,9 @@ export function mountPetHost(callbacks, port) {
   ctx.agentDefaultModel = { currentSelection: () => ({ provider: 'deepseek', model: 'deepseek-flash' }) }
   ctx.credentials = { resolve: async () => ({ value: callbacks.key() }) }
   ctx.get = () => undefined
-  ctx.connection.authenticatedUrl = () => 'http://127.0.0.1:5173/?assistant=open'
+  const webPort = Number(process.env.WORKBENCH_WEB_PORT ?? process.env.WORKBENCH_HTTP_PORT ?? 5173)
+  if (!Number.isInteger(webPort) || webPort < 1 || webPort > 65535) throw new Error('网页端口无效')
+  ctx.connection.authenticatedUrl = () => `http://127.0.0.1:${webPort}/?assistant=open`
   ctx.workbench = {
     setState: state => { petState = state },
     pending: callbacks.pending,

@@ -20,6 +20,7 @@ import { settingsRoutes } from './routes/settings.js'
 import { toolRoutes } from './routes/tools.js'
 import { uploadRoutes } from './routes/uploads.js'
 import { startScheduler } from './scheduler/index.js'
+import { registerLocalRequestGuard } from './security/localRequest.js'
 
 const PORT = Number(process.env.PORT ?? 5175)
 
@@ -28,18 +29,8 @@ async function main() {
   const assistant = createAssistant(sqlite)
 
   const app = Fastify({ logger: { level: 'warn' } })
-  // ★ 本地 API 的 Origin 白名单（2026-10-01 审查修复 #1）。
-  // 原来的 cors({ origin: true }) 会反射**任意**调用方 Origin——浏览器里任何网页都能
-  // 跨源读取本机 API（设置接口里有学习通 Cookie、推送凭据）。
-  // CORS 只控制浏览器读取响应；简单请求必须在路由执行前直接拒绝。
-  // 无 Origin 的请求（curl / 桌面客户端 / 同源页面）不受影响。
-  const ALLOWED_ORIGINS = new Set(['http://localhost:5173', 'http://127.0.0.1:5173'])
-  app.addHook('onRequest', async (req, reply) => {
-    const origin = req.headers.origin
-    if (origin !== undefined && !ALLOWED_ORIGINS.has(origin)) {
-      return reply.code(403).send({ message: '不允许此来源访问本地接口' })
-    }
-  })
+  app.addHook('onSend', async (_request, reply) => { reply.header('X-Content-Type-Options', 'nosniff') })
+  const ALLOWED_ORIGINS = registerLocalRequestGuard(app, { apiPort: PORT, webPort: Number(process.env.WORKBENCH_WEB_PORT ?? process.env.WORKBENCH_HTTP_PORT ?? 5173) })
   await app.register(cors, {
     origin: (origin, cb) => {
       cb(null, !origin || ALLOWED_ORIGINS.has(origin))

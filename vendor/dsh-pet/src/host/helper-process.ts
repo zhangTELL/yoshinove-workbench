@@ -12,6 +12,7 @@
  */
 
 import { spawn } from 'node:child_process';
+import { randomBytes } from 'node:crypto';
 import { existsSync, mkdirSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
@@ -25,6 +26,15 @@ export const defaultHelperMain = resolve(packageRoot, 'runtime', 'electron-helpe
 
 /** 协议行前缀：stdout/stdin 里以此开头的整行 JSON 属于 bridge 协议，其余为日志 */
 export const BRIDGE_PREFIX = 'dsh-pet-bridge:';
+
+/** 回调只能投递到当前机器的固定路径，不接受其他主机、凭据或重定向目标。 */
+export function isLocalBridgeCallback(value: unknown): value is string {
+  if (typeof value !== 'string' || !/^http:\/\/127\.0\.0\.1:[1-9]\d{0,4}\/respond$/.test(value)) return false;
+  try {
+    const url = new URL(value);
+    return Number(url.port) <= 65535 && url.href === value;
+  } catch { return false; }
+}
 
 /** 渲染端（经 main.js 转发）的一次请求：URL 是 /dsh-pet-7340/... 路径 + 查询串；
  *  cb = main.js 本地回调服务器地址（宿主把应答 POST 回去；Electron 主进程读不到 piped stdin，
@@ -280,6 +290,8 @@ export const HELPER_STOP_GRACE_MS = 1000;
 export function helperSpawnEnv(hostPid: number, extra?: Record<string, string | undefined>): NodeJS.ProcessEnv {
   const env: NodeJS.ProcessEnv = { ...process.env, DSH_PET_HOST_PID: String(hostPid), ...extra };
   delete env.ELECTRON_RUN_AS_NODE;
+  // 桌面 helper 只需要临时桥接令牌，不需要解密工作台凭据的主密钥。
+  delete env.WORKBENCH_SECRET_KEY;
   return env;
 }
 
@@ -295,6 +307,7 @@ export class HelperProcess {
   declare private lastStartAt: number;
   /** stdout 按行缓冲（协议行按 \n 切分）。用 declare + 构造器赋值，避免类字段降级出外部 helper */
   declare private stdoutBuffer: string;
+  declare private bridgeToken: string;
 
   constructor(options: HelperOptions = {}, logger: Logger = console) {
     this.options = options;
@@ -305,6 +318,7 @@ export class HelperProcess {
     this.restartFailures = 0;
     this.lastStartAt = 0;
     this.stdoutBuffer = '';
+    this.bridgeToken = '';
   }
 
   start(): import('node:child_process').ChildProcess | undefined {
@@ -321,6 +335,7 @@ export class HelperProcess {
     // 否则 pnpm 无法 rename 覆盖 node_modules/dsh-pet。助手侧资源解析与 CWD 无关，故用 $DSH_HOME。
     const cwd = this.options.cwd || dshHomeDir();
     mkdirSync(cwd, { recursive: true }); // spawn 的 cwd 不存在会直接 ENOENT
+    this.bridgeToken = randomBytes(32).toString('hex');
     const child = spawn(command, args, {
       cwd,
       // DSH_PET_HOST_PID：把**宿主自己的** pid 交给 helper，让它能判断"宿主还在不在"
@@ -332,7 +347,7 @@ export class HelperProcess {
       // 兜底，宿主非正常退出后 helper 会一直留着（issue #56 报告的就是这个）。
       // 环境变量统一经 helperSpawnEnv 构造：它会删掉会劫持 Electron 启动模式的 ELECTRON_RUN_AS_NODE
       // （issue #63，详见该函数注释）。
-      env: helperSpawnEnv(process.pid, this.options.env),
+      env: helperSpawnEnv(process.pid, { ...this.options.env, DSH_PET_BRIDGE_TOKEN: this.bridgeToken }),
       stdio: ['pipe', 'pipe', 'pipe'], // stdin 也要：bridge 协议响应回写（main.js 请求经 stdout 上来）
       windowsHide: true,
     });
@@ -399,7 +414,7 @@ export class HelperProcess {
       this.logger.warn?.('[dsh-pet desktop helper] bridge 协议行非法，已忽略');
       return;
     }
-    if (typeof req.id !== 'number') return;
+    if (!Number.isSafeInteger(req.id) || req.id < 1 || (req.cb !== undefined && !isLocalBridgeCallback(req.cb))) return;
     try {
       // bridgeHandler 返回完整 BridgeResponse（含 id）；异常时兜底 500
       const resp = await this.options.bridgeHandler(req);
@@ -416,12 +431,14 @@ export class HelperProcess {
 
   /** 把应答发回 main.js：优先 POST 到请求行携带的 cb（本地回调服务器）；无 cb 时回写 stdin（低版本兼容） */
   private sendBridgeResponse(req: BridgeRequest, resp: BridgeResponse): void {
-    const cb = typeof req.cb === 'string' && /^https?:[/][/]/.test(req.cb) ? req.cb : '';
+    const cb = isLocalBridgeCallback(req.cb) ? req.cb : '';
     if (cb) {
       void fetch(cb, {
         method: 'POST',
-        headers: { 'content-type': 'application/json' },
+        headers: { 'content-type': 'application/json', authorization: `Bearer ${this.bridgeToken}` },
         body: JSON.stringify(resp),
+        redirect: 'error',
+        signal: AbortSignal.timeout(5000),
       }).catch(() => {
         /* 回调失败（main.js 已退出等）：请求端会超时降级，这里静默 */
       });

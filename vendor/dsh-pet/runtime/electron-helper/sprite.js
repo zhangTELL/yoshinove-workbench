@@ -1337,7 +1337,7 @@ class PetSprite {
       const config = await response.json();
       document.title = (config.name || 'AI助手') + ' 桌宠';
       if (config.petDoubleClick === 'sidebar') {
-        window.petBridge?.openDshSite('http://127.0.0.1:5173/?assistant=open');
+        window.petBridge?.openAssistant();
         return;
       }
     } catch (error) { console.warn('[dsh-pet] 读取双击设置失败，使用独立对话框', error); }
