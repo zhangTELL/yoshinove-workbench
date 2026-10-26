@@ -16,7 +16,7 @@
   "devDependencies": {
     "concurrently": "^9.1.2",
     "esbuild": "0.25.12",
-    "fflate": "0.8.2"
+    "fflate": "0.8.3"
   },
   "dependencies": {
     "@electron-internal/extract-zip": "1.0.5",
